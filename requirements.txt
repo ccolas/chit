@@ -1,0 +1,21 @@
+# Receipt Library Dependencies
+
+# Core
+python-escpos>=3.0     # Thermal printer support
+pyusb>=1.2             # USB backend for python-escpos
+Pillow>=9.0            # Image generation for printing
+httpx>=0.24            # HTTP client for OpenRouter API
+
+# Voice
+pyaudio>=0.2.13        # Audio recording
+pynput>=1.7            # Keyboard input (hold-to-record)
+
+# Transcription (choose one)
+faster-whisper>=0.9    # Local Whisper (recommended for Raspberry Pi)
+# openai>=1.0           # OpenAI Whisper API (uncomment if using API)
+
+# LLM
+openai>=1.0            # OpenAI API client (also used for OpenRouter)
+
+# Raspberry Pi only (uncomment on Pi)
+# RPi.GPIO>=0.7         # GPIO for button input
