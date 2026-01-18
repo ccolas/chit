@@ -50,7 +50,7 @@ class Config:
     sample_rate: int = 16000
 
     # Conversation settings
-    max_context_messages: int = 30  # Only send last N messages to LLM (sliding window)
+    max_context_messages: int = 50  # Only send last N messages to LLM (sliding window)
     conversation_dir: str = field(default_factory=lambda: os.path.join(REPO_PATH, 'conversations'))
 
     # Font settings
@@ -61,7 +61,7 @@ class Config:
     font_small_size: int = 18
 
     # System prompt location
-    prompts_dir: str = field(default_factory=lambda: os.path.join(os.path.dirname(__file__), 'prompts'))
+    prompts_dir: str = field(default_factory=lambda: os.path.join(os.path.dirname(__file__), 'llm'))
 
     def __post_init__(self):
         """Ensure directories exist and set defaults based on backend."""
@@ -69,7 +69,7 @@ class Config:
 
         # Auto-select whisper model based on backend
         if self.whisper_model is None:
-            self.whisper_model = 'base' if self.backend == 'raspberry' else 'small'
+            self.whisper_model = 'base' if self.backend == 'raspberry' else 'medium'
 
     def get_system_prompt(self) -> str:
         """Load the system prompt from file."""

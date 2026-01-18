@@ -10,6 +10,10 @@ httpx>=0.24            # HTTP client for OpenRouter API
 pyaudio>=0.2.13        # Audio recording
 pynput>=1.7            # Keyboard input (hold-to-record)
 
+# Hands-free mode (optional)
+openwakeword>=0.5      # Wake word detection ("Hey Jarvis" etc)
+webrtcvad>=2.0.10      # Voice activity detection (detect speech end)
+
 # Transcription (choose one)
 faster-whisper>=0.9    # Local Whisper (recommended for Raspberry Pi)
 # openai>=1.0           # OpenAI Whisper API (uncomment if using API)
@@ -19,3 +23,5 @@ openai>=1.0            # OpenAI API client (also used for OpenRouter)
 
 # Raspberry Pi only (uncomment on Pi)
 # RPi.GPIO>=0.7         # GPIO for button input
+
+scipy<1.14

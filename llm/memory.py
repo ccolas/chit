@@ -11,14 +11,15 @@ Primitives:
 - rewrite_memory("new content") - Replace user.md entirely
 - rewrite_self("new content") - Replace self.md entirely
 """
-
+import os
 import re
 from pathlib import Path
 from datetime import datetime
 from typing import Tuple, List
 
 
-MEMORY_DIR = Path(__file__).parent / "memory"
+MEMORY_DIR = Path(__file__).parent.parent / "memory"
+os.makedirs(MEMORY_DIR, exist_ok=True)
 USER_FILE = MEMORY_DIR / "user.md"
 SELF_FILE = MEMORY_DIR / "self.md"
 

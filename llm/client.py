@@ -17,13 +17,13 @@ MAX_API_RETRIES = 3
 API_RETRY_DELAY = 2  # seconds, will double each retry
 MAX_VALIDATION_RETRIES = 2
 try:
-    from .config import Config, default_config
+    from ..config import Config, default_config
     from .memory import format_memories_for_prompt
     from .costs import track_usage
-except:
+except ImportError:
     from config import Config, default_config
-    from memory import format_memories_for_prompt
-    from costs import track_usage
+    from llm.memory import format_memories_for_prompt
+    from llm.costs import track_usage
 
 class LLMClient:
     """
@@ -44,6 +44,7 @@ class LLMClient:
         self.config = config or default_config
         self.conversation: List[Dict[str, str]] = []
         self._base_system_prompt = self.config.get_system_prompt()
+        self._conversation_start: Optional[str] = None  # Timestamp when conversation started
 
     @property
     def system_prompt(self) -> str:
@@ -84,6 +85,10 @@ class LLMClient:
         Returns:
             The assistant's response
         """
+        # Start new conversation if needed
+        if self._conversation_start is None:
+            self._conversation_start = datetime.now().strftime("%Y%m%d_%H%M%S")
+
         # Add timestamp to user message so Chit knows when they're talking
         timestamp = datetime.now().strftime("%A, %B %d at %I:%M %p")
         message_with_time = f"[{timestamp}]\n{user_message}"
@@ -107,6 +112,9 @@ class LLMClient:
 
         # Add assistant response to conversation
         self.conversation.append({"role": "assistant", "content": response})
+
+        # Save conversation after each exchange
+        self._save_conversation()
 
         return response
 
@@ -309,31 +317,28 @@ class LLMClient:
         Args:
             reason: Reason for reset (for logging)
         """
-        self._save_and_reset_conversation(reason)
+        if self.conversation:
+            print(f"[Conversation reset: {reason}]")
+        self.conversation = []
+        self._conversation_start = None
 
-    def _save_and_reset_conversation(self, reason: str):
-        """Save conversation to disk and reset."""
-        if not self.conversation:
+    def _save_conversation(self):
+        """Save conversation to disk (overwrites file for this conversation)."""
+        if not self.conversation or not self._conversation_start:
             return
 
-        # Create filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"conversation_{timestamp}_{reason}.json"
+        # Use conversation start timestamp in filename
+        filename = f"conversation_{self._conversation_start}.json"
         filepath = os.path.join(self.config.conversation_dir, filename)
 
         # Save conversation
         os.makedirs(self.config.conversation_dir, exist_ok=True)
         with open(filepath, 'w') as f:
             json.dump({
-                "timestamp": timestamp,
-                "reason": reason,
+                "started": self._conversation_start,
+                "last_updated": datetime.now().strftime("%Y%m%d_%H%M%S"),
                 "messages": self.conversation
             }, f, indent=2)
-
-        print(f"[Conversation saved to {filename}]")
-
-        # Reset
-        self.conversation = []
 
     def get_conversation_summary(self) -> str:
         """Get a brief summary of the current conversation."""

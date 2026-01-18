@@ -34,15 +34,28 @@ TOKEN_PRICES = {
 }
 
 
+def _default_data() -> Dict:
+    """Default cost data structure."""
+    return {
+        "total": {"input_tokens": 0, "output_tokens": 0, "cost": 0.0},
+        "daily": {},
+        "whisper": {"total_seconds": 0, "total_cost": 0.0, "daily": {}}
+    }
+
+
 def _load_costs() -> Dict:
     """Load costs from file."""
     if COSTS_FILE.exists():
         try:
             content = COSTS_FILE.read_text()
-            return json.loads(content)
+            data = json.loads(content)
+            # Ensure whisper section exists (migration)
+            if "whisper" not in data:
+                data["whisper"] = {"total_seconds": 0, "total_cost": 0.0, "daily": {}}
+            return data
         except (json.JSONDecodeError, IOError):
             pass
-    return {"total": {"input_tokens": 0, "output_tokens": 0, "cost": 0.0}, "daily": {}}
+    return _default_data()
 
 
 def _save_costs(data: Dict):
@@ -91,6 +104,26 @@ def track_usage(model: str, input_tokens: int, output_tokens: int):
     return cost
 
 
+def track_whisper_usage(duration_seconds: float):
+    """Track OpenAI Whisper API usage. $0.006 per minute."""
+    data = _load_costs()
+    today = date.today().isoformat()
+
+    cost = duration_seconds * 0.006 / 60  # $0.006 per minute
+
+    data["whisper"]["total_seconds"] += duration_seconds
+    data["whisper"]["total_cost"] += cost
+
+    if today not in data["whisper"]["daily"]:
+        data["whisper"]["daily"][today] = {"seconds": 0, "cost": 0.0}
+
+    data["whisper"]["daily"][today]["seconds"] += duration_seconds
+    data["whisper"]["daily"][today]["cost"] += cost
+
+    _save_costs(data)
+    return cost
+
+
 def get_costs() -> Dict:
     """Get current cost data."""
     return _load_costs()
@@ -116,12 +149,20 @@ def format_costs() -> str:
     data = _load_costs()
     today = date.today().isoformat()
 
+    # LLM costs
     total = data["total"]
     daily = data["daily"].get(today, {"input_tokens": 0, "output_tokens": 0, "cost": 0.0})
 
+    # Whisper costs
+    whisper = data.get("whisper", {"total_seconds": 0, "total_cost": 0.0, "daily": {}})
+    whisper_daily = whisper.get("daily", {}).get(today, {"seconds": 0, "cost": 0.0})
+
+    today_total = daily['cost'] + whisper_daily.get('cost', 0)
+    all_time_total = total['cost'] + whisper.get('total_cost', 0)
+
     lines = [
-        f"Today: ${daily['cost']:.4f} ({daily['input_tokens'] + daily['output_tokens']:,} tokens)",
-        f"Total: ${total['cost']:.4f} ({total['input_tokens'] + total['output_tokens']:,} tokens)",
+        f"Today: ${today_total:.4f} (LLM: ${daily['cost']:.4f}, Whisper: ${whisper_daily.get('cost', 0):.4f})",
+        f"Total: ${all_time_total:.4f} (LLM: ${total['cost']:.4f}, Whisper: ${whisper.get('total_cost', 0):.4f})",
     ]
     return "\n".join(lines)
 

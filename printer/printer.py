@@ -30,13 +30,18 @@ except ImportError:
     PIL_AVAILABLE = False
 
 try:
-    from .config import Config, default_config
+    from ..config import Config, default_config
     from .dsl import ChitDSL, render_chit_output
-    from .memory import process_chit_response
-except:
-    from config import Config, default_config
-    from dsl import ChitDSL, render_chit_output
-    from memory import process_chit_response
+    from ..llm.memory import process_chit_response
+except ImportError:
+    try:
+        from config import Config, default_config
+        from printer.dsl import ChitDSL, render_chit_output
+        from llm.memory import process_chit_response
+    except ImportError:
+        from config import Config, default_config
+        from dsl import ChitDSL, render_chit_output
+        from llm.memory import process_chit_response
 
 class ReceiptPrinter:
     """Handles printing formatted text to thermal printers."""
@@ -99,6 +104,64 @@ class ReceiptPrinter:
             self.printer.close()
         self.printer = None
 
+    def beep(self, times: int = 1):
+        """
+        Try to make the printer beep (if it has a buzzer).
+
+        Most cheap 58mm printers don't have a buzzer, but some do.
+        Falls back to chirp() if beep isn't supported.
+        """
+        if not self.printer:
+            self.connect()
+
+        try:
+            # ESC BEL - standard buzzer command
+            for _ in range(times):
+                self.printer._raw(b'\x1b\x07')  # ESC BEL
+        except Exception:
+            # Fallback to motor noise
+            self.chirp(times)
+
+    def chirp(self, times: int = 1):
+        """
+        Make a short motor sound by feeding minimal paper.
+
+        Feeds 1 line forward - makes a click/chirp sound.
+        Uses very little paper (~1mm per chirp).
+        """
+        if not self.printer:
+            self.connect()
+
+        for _ in range(times):
+            # Feed 1 line (minimal paper usage, but audible motor sound)
+            self.printer._raw(b'\x1b\x64\x01')  # ESC d 1 - feed 1 line
+
+    def chirp_start(self):
+        """Two short chirps - 'listening started' signal."""
+        import time
+        if not self.printer:
+            self.connect()
+        self.printer._raw(b'\x1b\x64\x01')  # 1 line
+        time.sleep(0.12)
+        self.printer._raw(b'\x1b\x64\x01')  # 1 line
+
+    def chirp_stop(self):
+        """Two longer chirps - 'listening stopped' signal."""
+        import time
+        if not self.printer:
+            self.connect()
+        self.printer._raw(b'\x1b\x64\x02')  # 2 lines
+        time.sleep(0.15)
+        self.printer._raw(b'\x1b\x64\x02')  # 2 lines
+
+    def double_chirp(self):
+        """Alias for chirp_start."""
+        self.chirp_start()
+
+    def long_chirp(self):
+        """Alias for chirp_stop."""
+        self.chirp_stop()
+
     def print_text(self, text: str, title: Optional[str] = None):
         """
         Print formatted text using image-based rendering.
@@ -124,7 +187,7 @@ class ReceiptPrinter:
         # Print image (borders are drawn inside the image)
         p = self.printer
         p.image(img, impl='bitImageColumn')
-        p.text("\n\n\n\n")  # margin for cutting
+        p.text("\n\n")  # margin for cutting
 
     def _create_text_image(self, text: str, title: Optional[str] = None) -> Image.Image:
         """
@@ -294,11 +357,29 @@ class ReceiptPrinter:
         This gives Chit full creative control over the output:
         fonts, sizes, alignment, spacing, ASCII art, etc.
 
+        Supports chirp() commands for audio feedback (executed before/after print).
+
         Args:
             code: Chit DSL code
         """
         if not self.printer:
             self.connect()
+
+        # Extract and execute chirp commands (before printing)
+        # chirp() or chirp(N) where N is number of chirps
+        import time
+        chirp_pattern = re.compile(r'^\s*chirp\s*\((\d*)\)\s*$', re.MULTILINE)
+
+        def execute_chirp(match):
+            count = int(match.group(1)) if match.group(1) else 1
+            count = min(count, 5)  # Max 5 chirps
+            for i in range(count):
+                self.chirp(1)
+                if i < count - 1:
+                    time.sleep(0.12)
+            return ''  # Remove from code
+
+        code = chirp_pattern.sub(execute_chirp, code)
 
         if not PIL_AVAILABLE:
             # Can't render DSL without PIL, fall back to plain text

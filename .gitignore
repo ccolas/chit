@@ -48,4 +48,6 @@ conversations/
 user.md
 self.md
 memory
-costs.txt
+llm/costs.txt
+voice/wakeword_training/wakeword_samples/*
+voice/wakeword_training/wakeword_samples
