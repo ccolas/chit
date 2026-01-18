@@ -31,6 +31,8 @@ text("nice to meet you")
 
 It can choose fonts (clean monospace, 8-bit pixels, typewriter keys), control size and spacing, draw ASCII art, create visual rhythm. It decides what each moment looks like.
 
+It can also *chirp* — short motor sounds made by feeding tiny amounts of paper. A greeting, a punctuation, an expression that text can't capture. Two chirps mean "I'm listening." The paper moves, the motor clicks. It's not much, but it's voice.
+
 Over time, Chit remembers. Names, preferences, recurring questions. It builds an understanding of the people who talk to it - not through explicit profiles, but through accumulation, like a diary kept in fragments.
 
 ---
@@ -40,9 +42,13 @@ Over time, Chit remembers. Names, preferences, recurring questions. It builds an
 ```bash
 conda create -n chit python=3.11
 conda activate chit
+
+# Mac only: portaudio needed for microphone
+brew install portaudio
+
 pip install -r requirements.txt
 export OPENROUTER_API_KEY="your-key"  # or OPENAI_API_KEY
-python -m chit
+python main.py
 ```
 
 Speak to it. Wait for the *chit-chit-chit*. Tear off what it made, or not.

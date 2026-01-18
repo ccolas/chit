@@ -546,7 +546,6 @@ def main():
     )
 
     args = parser.parse_args()
-    args.text = True
 
     # Create config
     config_kwargs = {
