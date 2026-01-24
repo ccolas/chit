@@ -43,9 +43,9 @@ Over time, Chit remembers. Names, preferences, recurring questions. It builds an
 conda create -n chit python=3.11
 conda activate chit
 
-pip install -e .
+pip install -r requirements.txt
 export OPENROUTER_API_KEY="your-key"  # or OPENAI_API_KEY
-chit
+python main.py
 ```
 
 Speak to it. Wait for the *chit-chit-chit*. Tear off what it made, or not.
@@ -56,19 +56,19 @@ Speak to it. Wait for the *chit-chit-chit*. Tear off what it made, or not.
 
 ```bash
 # Voice input (local Whisper) + print
-chit
+python main.py
 
 # Voice input (OpenAI Whisper) + print
-chit --whisper openai
+python main.py --whisper openai
 
 # Voice input, terminal only (no printing)
-chit --no-print
+python main.py --no-print
 
 # Text input mode (type instead of speak)
-chit --text
+python main.py --text
 
 # Hands-free mode (say "Hey Jarvis" to activate)
-chit --hands-free
+python main.py --hands-free
 ```
 
 **Options:**
