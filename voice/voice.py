@@ -7,24 +7,10 @@ import os
 import sys
 import tempfile
 import wave
-from contextlib import contextmanager
 from typing import Optional
 
-@contextmanager
-def _suppress_alsa_errors():
-    """Suppress ALSA error messages during PyAudio init."""
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    old_stderr = os.dup(2)
-    os.dup2(devnull, 2)
-    os.close(devnull)
-    try:
-        yield
-    finally:
-        os.dup2(old_stderr, 2)
-        os.close(old_stderr)
-
-with _suppress_alsa_errors():
-    import pyaudio
+import numpy as np
+import sounddevice as sd
 from faster_whisper import WhisperModel
 
 try:
@@ -64,39 +50,29 @@ class VoiceRecorder:
             config: Configuration object
         """
         self.config = config or default_config
-        self._audio = None
         self._stream = None
         self._frames = []
         self._recording = False
 
-    def _init_audio(self):
-        """Initialize PyAudio."""
-        if self._audio is None:
-            with _suppress_alsa_errors():
-                self._audio = pyaudio.PyAudio()
-
     def start_recording(self):
         """Start recording audio."""
-        self._init_audio()
         self._frames = []
         self._recording = True
 
-        self._stream = self._audio.open(
-            format=pyaudio.paInt16,
+        self._stream = sd.RawInputStream(
+            samplerate=self.config.sample_rate,
             channels=1,
-            rate=self.config.sample_rate,
-            input=True,
-            frames_per_buffer=1024,
-            stream_callback=self._audio_callback
+            dtype='int16',
+            blocksize=1024,
+            callback=self._audio_callback
         )
-        self._stream.start_stream()
+        self._stream.start()
         print("[Recording...]")
 
-    def _audio_callback(self, in_data, frame_count, time_info, status):
+    def _audio_callback(self, indata, frames, time, status):
         """Callback for audio stream."""
         if self._recording:
-            self._frames.append(in_data)
-        return (in_data, pyaudio.paContinue)
+            self._frames.append(bytes(indata))
 
     def stop_recording(self, min_duration: float = 1.0) -> Optional[str]:
         """
@@ -111,7 +87,7 @@ class VoiceRecorder:
         self._recording = False
 
         if self._stream:
-            self._stream.stop_stream()
+            self._stream.stop()
             self._stream.close()
             self._stream = None
 
@@ -141,9 +117,9 @@ class VoiceRecorder:
 
     def cleanup(self):
         """Clean up audio resources."""
-        if self._audio:
-            self._audio.terminate()
-            self._audio = None
+        if self._stream:
+            self._stream.close()
+            self._stream = None
 
 
 class Transcriber:
@@ -309,7 +285,6 @@ class HandsFreeVoiceInput:
         """
         self.config = config or default_config
         self.transcriber = Transcriber(config)
-        self._audio = None
         self._running = False
         self._led_callback = led_callback
         self._on_recording_start = on_recording_start
@@ -327,12 +302,6 @@ class HandsFreeVoiceInput:
 
         # Wake word detector (lazy loaded)
         self._wake_detector = None
-
-    def _init_audio(self):
-        """Initialize PyAudio."""
-        if self._audio is None:
-            with _suppress_alsa_errors():
-                self._audio = pyaudio.PyAudio()
 
     def _set_led(self, on: bool):
         """Control LED indicator."""
@@ -379,20 +348,17 @@ class HandsFreeVoiceInput:
             except:
                 return False
 
-        self._init_audio()
-
         # Open stream for wake word detection
         chunk_size = 1280  # ~80ms at 16kHz
-        stream = self._audio.open(
-            format=pyaudio.paInt16,
+        stream = sd.RawInputStream(
+            samplerate=self.config.sample_rate,
             channels=1,
-            rate=self.config.sample_rate,
-            input=True,
-            frames_per_buffer=chunk_size
+            dtype='int16',
+            blocksize=chunk_size
         )
+        stream.start()
 
         import time
-        import numpy as np
 
         start_time = time.time()
         detected = False
@@ -404,7 +370,7 @@ class HandsFreeVoiceInput:
                 if timeout and (time.time() - start_time) > timeout:
                     break
 
-                audio_data = stream.read(chunk_size, exception_on_overflow=False)
+                audio_data, overflowed = stream.read(chunk_size)
                 audio_chunk = np.frombuffer(audio_data, dtype=np.int16)
 
                 if self._wake_detector.detect(audio_chunk, threshold=0.5):
@@ -414,7 +380,7 @@ class HandsFreeVoiceInput:
                     break
 
         finally:
-            stream.stop_stream()
+            stream.stop()
             stream.close()
 
         return detected
@@ -436,20 +402,19 @@ class HandsFreeVoiceInput:
         Returns:
             Path to audio file, or None if no speech
         """
-        self._init_audio()
         self._set_led(True)
 
         # Frame settings for VAD (30ms frames)
         frame_duration_ms = 30
         frame_size = int(self.config.sample_rate * frame_duration_ms / 1000)
 
-        stream = self._audio.open(
-            format=pyaudio.paInt16,
+        stream = sd.RawInputStream(
+            samplerate=self.config.sample_rate,
             channels=1,
-            rate=self.config.sample_rate,
-            input=True,
-            frames_per_buffer=frame_size
+            dtype='int16',
+            blocksize=frame_size
         )
+        stream.start()
 
         import time
 
@@ -478,16 +443,16 @@ class HandsFreeVoiceInput:
                     break
 
                 # Read audio frame
-                audio_data = stream.read(frame_size, exception_on_overflow=False)
-                frames.append(audio_data)
+                audio_data, overflowed = stream.read(frame_size)
+                audio_bytes = bytes(audio_data)
+                frames.append(audio_bytes)
 
                 # Check for speech using VAD
                 if self._vad:
-                    is_speech = self._vad.is_speech(audio_data)
+                    is_speech = self._vad.is_speech(audio_bytes)
                 else:
                     # Fallback: use simple energy detection
-                    import numpy as np
-                    audio = np.frombuffer(audio_data, dtype=np.int16)
+                    audio = np.frombuffer(audio_bytes, dtype=np.int16)
                     energy = np.sqrt(np.mean(audio.astype(np.float32) ** 2))
                     is_speech = energy > 500  # Threshold
 
@@ -507,7 +472,7 @@ class HandsFreeVoiceInput:
                     break
 
         finally:
-            stream.stop_stream()
+            stream.stop()
             stream.close()
             self._set_led(False)
 
@@ -582,9 +547,6 @@ class HandsFreeVoiceInput:
     def cleanup(self):
         """Clean up resources."""
         self._running = False
-        if self._audio:
-            self._audio.terminate()
-            self._audio = None
 
 
 def test_voice():

@@ -43,15 +43,42 @@ Over time, Chit remembers. Names, preferences, recurring questions. It builds an
 conda create -n chit python=3.11
 conda activate chit
 
-# Mac only: portaudio needed for microphone
-brew install portaudio
-
-pip install -r requirements.txt
+pip install -e .
 export OPENROUTER_API_KEY="your-key"  # or OPENAI_API_KEY
-python main.py
+chit
 ```
 
 Speak to it. Wait for the *chit-chit-chit*. Tear off what it made, or not.
+
+---
+
+## Usage
+
+```bash
+# Voice input (local Whisper) + print
+chit
+
+# Voice input (OpenAI Whisper) + print
+chit --whisper openai
+
+# Voice input, terminal only (no printing)
+chit --no-print
+
+# Text input mode (type instead of speak)
+chit --text
+
+# Hands-free mode (say "Hey Jarvis" to activate)
+chit --hands-free
+```
+
+**Options:**
+- `--whisper local|openai` — transcription provider (default: local)
+- `--whisper-model <size>` — local model size: base, small, medium, large
+- `--model <model>` — LLM model (default: google/gemini-2.0-flash-001)
+- `--backend laptop|raspberry` — input mode (default: laptop)
+- `--no-print` — disable printing, terminal output only
+- `--hands-free` — wake word detection mode
+- `--text` — type messages instead of voice
 
 ---
 

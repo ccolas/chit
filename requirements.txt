@@ -12,12 +12,12 @@ python-escpos>=3.0     # Thermal printer ESC/POS commands
 pyusb>=1.2             # USB backend for python-escpos
 
 # Voice input
-pyaudio>=0.2.13        # Audio recording
+sounddevice>=0.4       # Audio recording
 faster-whisper>=0.9    # Local Whisper transcription
 
 # Hands-free mode
 openwakeword>=0.5      # Wake word detection ("Hey Jarvis")
-webrtcvad>=2.0.10      # Voice activity detection (silence detection)
+webrtcvad-wheels>=2.0.10  # Voice activity detection (silence detection)
 
 # Raspberry Pi only (uncomment on Pi)
 # RPi.GPIO>=0.7         # GPIO for button input

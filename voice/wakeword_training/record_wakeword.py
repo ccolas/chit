@@ -11,8 +11,10 @@ Press Enter to start each recording, speak, then press Enter to stop.
 
 import os
 import wave
-import pyaudio
+import threading
 import time
+
+import sounddevice as sd
 
 SAMPLE_DIR = "wakeword_samples"
 SAMPLE_RATE = 16000
@@ -21,26 +23,23 @@ NUM_SAMPLES = 15
 
 def record_sample(index: int) -> str:
     """Record a single sample."""
-    audio = pyaudio.PyAudio()
-
     print(f"\n[Sample {index + 1}/{NUM_SAMPLES}]")
     print("Press Enter, say 'Hey Chit', then press Enter again...")
     input()
 
     # Start recording
-    stream = audio.open(
-        format=pyaudio.paInt16,
+    stream = sd.RawInputStream(
+        samplerate=SAMPLE_RATE,
         channels=1,
-        rate=SAMPLE_RATE,
-        input=True,
-        frames_per_buffer=1024
+        dtype='int16',
+        blocksize=1024
     )
+    stream.start()
 
     frames = []
-    print("🔴 Recording... say 'Hey Chit' now!")
+    print("Recording... say 'Hey Chit' now!")
 
     # Record in a loop until Enter is pressed
-    import threading
     stop_flag = threading.Event()
 
     def wait_for_enter():
@@ -51,12 +50,11 @@ def record_sample(index: int) -> str:
     t.start()
 
     while not stop_flag.is_set():
-        data = stream.read(1024, exception_on_overflow=False)
-        frames.append(data)
+        data, overflowed = stream.read(1024)
+        frames.append(bytes(data))
 
-    stream.stop_stream()
+    stream.stop()
     stream.close()
-    audio.terminate()
 
     # Save to file
     filename = os.path.join(SAMPLE_DIR, f"hey_chit_{index + 1:02d}.wav")
