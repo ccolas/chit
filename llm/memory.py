@@ -54,7 +54,7 @@ def _append_to_file(path: Path, line: str):
     if content and not content.endswith("\n"):
         content += "\n"
 
-    content += f"- {line} ({timestamp})\n"
+    content += f"\n---\nDate: {timestamp}\n{line}\n"
     path.write_text(content)
 
 

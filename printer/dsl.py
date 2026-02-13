@@ -147,7 +147,8 @@ class ChitDSL:
         commands = []
 
         # Handle raw blocks specially - extract them first
-        raw_pattern = r'raw\s*\(\s*(?:"""|\'\'\')(.*?)(?:"""|\'\'\')\s*\)'
+        # Match raw("""...""") or raw("""...""", size=18) etc.
+        raw_pattern = r'raw\s*\(\s*(?:"""|\'\'\')(.*?)(?:"""|\'\'\')\s*(?:,\s*([^)]*))?\)'
         raw_blocks = {}
         raw_counter = [0]
 
@@ -155,6 +156,10 @@ class ChitDSL:
             placeholder = f"__RAW_BLOCK_{raw_counter[0]}__"
             raw_blocks[placeholder] = match.group(1)
             raw_counter[0] += 1
+            # Preserve additional kwargs if present
+            extra_args = match.group(2)
+            if extra_args:
+                return f'raw("{placeholder}", {extra_args})'
             return f'raw("{placeholder}")'
 
         code = re.sub(raw_pattern, replace_raw, code, flags=re.DOTALL)

@@ -46,9 +46,11 @@ conversations/
 .api_openrouter
 .api_openai
 user.md
+.claude
 self.md
 memory
 llm/costs.txt
 voice/wakeword_samples/*
 voice/wakeword_training/wakeword_samples/*
 voice/wakeword_training/wakeword_samples
+ssh_command

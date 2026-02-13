@@ -348,17 +348,24 @@ class HandsFreeVoiceInput:
             except:
                 return False
 
-        # Open stream for wake word detection
+        # Open stream for wake word detection using queue (non-blocking)
+        import queue
+        import time
+
         chunk_size = 1280  # ~80ms at 16kHz
+        audio_queue = queue.Queue()
+
+        def audio_callback(indata, frames, time_info, status):
+            audio_queue.put(bytes(indata))
+
         stream = sd.RawInputStream(
             samplerate=self.config.sample_rate,
             channels=1,
             dtype='int16',
-            blocksize=chunk_size
+            blocksize=chunk_size,
+            callback=audio_callback
         )
         stream.start()
-
-        import time
 
         start_time = time.time()
         detected = False
@@ -366,18 +373,21 @@ class HandsFreeVoiceInput:
         print("[Listening for wake word...]")
 
         try:
-            while self._running or timeout is None:
+            while self._running:
                 if timeout and (time.time() - start_time) > timeout:
                     break
 
-                audio_data, overflowed = stream.read(chunk_size)
-                audio_chunk = np.frombuffer(audio_data, dtype=np.int16)
+                try:
+                    audio_data = audio_queue.get(timeout=0.1)
+                    audio_chunk = np.frombuffer(audio_data, dtype=np.int16)
 
-                if self._wake_detector.detect(audio_chunk, threshold=0.5):
-                    print("[Wake word detected!]")
-                    detected = True
-                    self._wake_detector.reset()
-                    break
+                    if self._wake_detector.detect(audio_chunk, threshold=0.5):
+                        print("[Wake word detected!]")
+                        detected = True
+                        self._wake_detector.reset()
+                        break
+                except queue.Empty:
+                    continue
 
         finally:
             stream.stop()
@@ -405,18 +415,25 @@ class HandsFreeVoiceInput:
         self._set_led(True)
 
         # Frame settings for VAD (30ms frames)
+        import queue
+        import time
+
         frame_duration_ms = 30
         frame_size = int(self.config.sample_rate * frame_duration_ms / 1000)
+
+        audio_queue = queue.Queue()
+
+        def audio_callback(indata, frames_count, time_info, status):
+            audio_queue.put(bytes(indata))
 
         stream = sd.RawInputStream(
             samplerate=self.config.sample_rate,
             channels=1,
             dtype='int16',
-            blocksize=frame_size
+            blocksize=frame_size,
+            callback=audio_callback
         )
         stream.start()
-
-        import time
 
         frames = []
         speech_frames = 0
@@ -435,16 +452,18 @@ class HandsFreeVoiceInput:
                 print(f"[Recording start callback error: {e}]")
 
         try:
-            while True:
+            while self._running:
                 # Check max duration
                 elapsed = time.time() - start_time
                 if elapsed > max_duration:
                     print(f"[Max duration reached ({max_duration}s)]")
                     break
 
-                # Read audio frame
-                audio_data, overflowed = stream.read(frame_size)
-                audio_bytes = bytes(audio_data)
+                # Read audio frame (non-blocking with timeout)
+                try:
+                    audio_bytes = audio_queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
                 frames.append(audio_bytes)
 
                 # Check for speech using VAD

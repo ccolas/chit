@@ -39,14 +39,49 @@ Over time, Chit remembers. Names, preferences, recurring questions. It builds an
 
 ## Setup
 
+### macOS (Apple Silicon)
+
+```bash
+# Create environment
+conda create -n chit python=3.11
+conda activate chit
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install libusb for USB printer support (must use conda for ARM compatibility)
+conda install -c conda-forge libusb
+
+# Set API key
+export OPENROUTER_API_KEY="your-key"  # or OPENAI_API_KEY
+
+# Run
+python main.py
+```
+
+> **Note:** On Apple Silicon Macs, you must install libusb via conda (not Homebrew) to match the ARM architecture. If you see `NoBackendError: No backend available`, this is the fix.
+
+### macOS (Intel) / Linux
+
 ```bash
 conda create -n chit python=3.11
 conda activate chit
 
 pip install -r requirements.txt
-export OPENROUTER_API_KEY="your-key"  # or OPENAI_API_KEY
+
+# Install libusb
+brew install libusb  # macOS
+# or: sudo apt install libusb-1.0-0-dev  # Linux
+
+export OPENROUTER_API_KEY="your-key"
 python main.py
 ```
+
+### Raspberry Pi
+
+See [RASPBERRY_PI_SETUP.md](RASPBERRY_PI_SETUP.md) for detailed instructions.
+
+---
 
 Speak to it. Wait for the *chit-chit-chit*. Tear off what it made, or not.
 

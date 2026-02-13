@@ -498,6 +498,8 @@ class TextAssistant:
     def _handle_shutdown(self, signum, frame):
         print("\n[Shutting down...]")
         self._running = False
+        self._cleanup()
+        sys.exit(0)
 
     def _cleanup(self):
         self.printer.disconnect()
@@ -545,8 +547,10 @@ def main():
         help='Type messages instead of voice input'
     )
 
-    args = parser.parse_args()
 
+    args = parser.parse_args()
+    # args.whisper = "openai"
+    # args.no_print = True
     # Create config
     config_kwargs = {
         'backend': args.backend,

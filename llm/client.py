@@ -237,6 +237,8 @@ class LLMClient:
                     print()  # newline after streaming
                     if usage_data:
                         track_usage(model, usage_data.get("prompt_tokens", 0), usage_data.get("completion_tokens", 0))
+                    if not response_text.strip():
+                        raise ValueError("LLM returned empty response - check OpenRouter credits or API status")
                     return response_text
                 else:
                     with httpx.Client() as http_client:
@@ -248,9 +250,18 @@ class LLMClient:
                         )
                         response.raise_for_status()
                         result = response.json()
+
+                        # Check for API errors
+                        if result.get("error"):
+                            raise ValueError(f"OpenRouter error: {result['error'].get('message', result['error'])}")
+
                         if result.get("usage"):
                             track_usage(model, result["usage"].get("prompt_tokens", 0), result["usage"].get("completion_tokens", 0))
-                        return result["choices"][0]["message"]["content"]
+
+                        content = result["choices"][0]["message"]["content"]
+                        if not content or not content.strip():
+                            raise ValueError("LLM returned empty response - check OpenRouter credits or API status")
+                        return content
 
             except Exception as e:
                 last_error = e
