@@ -23,7 +23,10 @@ except ImportError:
 def _load_access_key() -> Optional[str]:
     """Load Picovoice access key from file."""
     repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    key_file = os.path.join(repo_path, '.picovoice_key')
+    if _is_raspberry_pi():
+        key_file = os.path.join(repo_path, '.picovoice_key_rasp')
+    else:
+        key_file = os.path.join(repo_path, '.picovoice_key')
     if os.path.exists(key_file):
         with open(key_file) as f:
             return f.read().strip()
@@ -43,6 +46,10 @@ def _is_raspberry_pi() -> bool:
 
 def _find_custom_model() -> Optional[str]:
     """Find custom .ppn model for current platform."""
+    # Disabled for now - custom models hit activation limits on free tier
+    # To re-enable, remove the return None below
+    # return None
+
     voice_dir = os.path.dirname(os.path.abspath(__file__))
 
     if _is_raspberry_pi():
