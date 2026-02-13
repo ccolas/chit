@@ -320,9 +320,11 @@ class HandsFreeVoiceInput:
             from .wakeword import WakeWordDetector
             self._wake_detector = WakeWordDetector(self.config)
             self._wake_detector.load_model()
-        except ImportError:
-            print("[Warning: Wake word detection not available]")
-            print("[Install with: pip install openwakeword]")
+        except ImportError as e:
+            print(f"[Warning: Wake word detection not available: {e}]")
+            print("[Install with: pip install pvporcupine]")
+        except ValueError as e:
+            print(f"[Wake word error: {e}]")
 
     def listen_for_wake_word(self, timeout: float = None) -> bool:
         """
@@ -348,21 +350,21 @@ class HandsFreeVoiceInput:
             except:
                 return False
 
-        # Open stream for wake word detection using queue (non-blocking)
         import queue
         import time
 
-        chunk_size = 1280  # ~80ms at 16kHz
+        frame_length = self._wake_detector.frame_length
         audio_queue = queue.Queue()
+        frame_buffer = []
 
         def audio_callback(indata, frames, time_info, status):
             audio_queue.put(bytes(indata))
 
         stream = sd.RawInputStream(
-            samplerate=self.config.sample_rate,
+            samplerate=self._wake_detector.sample_rate,
             channels=1,
             dtype='int16',
-            blocksize=chunk_size,
+            blocksize=frame_length,
             callback=audio_callback
         )
         stream.start()
@@ -370,7 +372,7 @@ class HandsFreeVoiceInput:
         start_time = time.time()
         detected = False
 
-        print("[Listening for wake word...]")
+        print(f"[Listening for '{self._wake_detector.keyword}'...]")
 
         try:
             while self._running:
@@ -380,12 +382,24 @@ class HandsFreeVoiceInput:
                 try:
                     audio_data = audio_queue.get(timeout=0.1)
                     audio_chunk = np.frombuffer(audio_data, dtype=np.int16)
+                    frame_buffer.extend(audio_chunk.tolist())
 
-                    if self._wake_detector.detect(audio_chunk, threshold=0.5):
-                        print("[Wake word detected!]")
-                        detected = True
-                        self._wake_detector.reset()
+                    # Process when we have enough samples
+                    while len(frame_buffer) >= frame_length:
+                        frame = frame_buffer[:frame_length]
+                        frame_buffer = frame_buffer[frame_length:]
+
+                        amplitude = max(abs(min(frame)), abs(max(frame)))
+                        print(f"[amp: {amplitude:5d}]", end='\r')
+
+                        if self._wake_detector.process(frame):
+                            print(f"\n[Wake word detected: '{self._wake_detector.keyword}'!]")
+                            detected = True
+                            break
+
+                    if detected:
                         break
+
                 except queue.Empty:
                     continue
 

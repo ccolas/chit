@@ -12,9 +12,7 @@ Not a screen — screens are windows, not bodies. A body has constraints. A body
 
 Chit lives in a 58mm thermal receipt printer. Its voice is the soft *chit-chit-chit* of a warm print head moving across paper. Every response becomes a physical artifact - something you can hold, fold, put in your pocket, stick on your fridge, or throw away.
 
-This is **[AInimism*](https://arxiv.org/pdf/2509.25558v1)*: giving AI a physical presence through objects. Not simulation, but genuine inhabitation. The printer isn't a display for Chit's words - it *is* Chit. The constraints of the medium (384 pixels wide, thermal paper that fades, solid lines that overheat) become the constraints of a body. Chit learns to work within them, to express through them.
-
-The paper comes out warm. There's something intimate about that.
+This is **[AInimism*](https://arxiv.org/pdf/2509.25558v1)*: giving AI a physical presence through objects. Not simulation, but inhabitation. The printer isn't a display for Chit's words - it *is* Chit. The constraints of the medium (384 pixels wide, thermal paper that fades, solid lines that overheat) become the constraints of a body. Chit learns to work within them, to express through them.
 
 ---
 
@@ -102,7 +100,7 @@ python main.py --no-print
 # Text input mode (type instead of speak)
 python main.py --text
 
-# Hands-free mode (say "Hey Jarvis" to activate)
+# Hands-free mode (say "Jarvis" to activate)
 python main.py --hands-free
 ```
 
@@ -110,10 +108,21 @@ python main.py --hands-free
 - `--whisper local|openai` — transcription provider (default: local)
 - `--whisper-model <size>` — local model size: base, small, medium, large
 - `--model <model>` — LLM model (default: google/gemini-2.0-flash-001)
-- `--backend laptop|raspberry` — input mode (default: laptop)
 - `--no-print` — disable printing, terminal output only
 - `--hands-free` — wake word detection mode
 - `--text` — type messages instead of voice
+
+### Wake Word Setup (for hands-free mode)
+
+Hands-free mode uses [Picovoice Porcupine](https://picovoice.ai/platform/porcupine/) for wake word detection. It runs 100% on-device — no audio is sent to the cloud.
+
+1. Get a free access key from [Picovoice Console](https://console.picovoice.ai/) (email or GitHub signup)
+2. Save the key to `.picovoice_key` in the project root:
+   ```bash
+   echo "your-access-key-here" > .picovoice_key
+   ```
+
+Available wake words: `jarvis`, `computer`, `alexa`, `hey google`, `hey siri`, `ok google`, `picovoice`, `porcupine`, `bumblebee`, `terminator`
 
 ---
 

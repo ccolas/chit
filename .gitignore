@@ -54,3 +54,4 @@ voice/wakeword_samples/*
 voice/wakeword_training/wakeword_samples/*
 voice/wakeword_training/wakeword_samples
 ssh_command
+.picovoice_key

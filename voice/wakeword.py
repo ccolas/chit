@@ -1,18 +1,18 @@
 """
-Wake word detection for hands-free activation.
-Uses OpenWakeWord for free, open-source wake word detection.
+Wake word detection using Picovoice Porcupine.
+Runs 100% on-device - no audio sent to cloud.
 """
 
-import numpy as np
-from typing import Callable, Optional
-import threading
-import time
+import os
+import platform
+import glob
+from typing import Optional
 
 try:
-    from openwakeword.model import Model as OWWModel
-    OPENWAKEWORD_AVAILABLE = True
+    import pvporcupine
+    PORCUPINE_AVAILABLE = True
 except ImportError:
-    OPENWAKEWORD_AVAILABLE = False
+    PORCUPINE_AVAILABLE = False
 
 try:
     from ..config import Config, default_config
@@ -20,91 +20,156 @@ except ImportError:
     from config import Config, default_config
 
 
+def _load_access_key() -> Optional[str]:
+    """Load Picovoice access key from file."""
+    repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    key_file = os.path.join(repo_path, '.picovoice_key')
+    if os.path.exists(key_file):
+        with open(key_file) as f:
+            return f.read().strip()
+    return os.environ.get('PICOVOICE_ACCESS_KEY')
+
+
+def _is_raspberry_pi() -> bool:
+    """Check if running on Raspberry Pi."""
+    if platform.system() != 'Linux':
+        return False
+    try:
+        with open('/proc/cpuinfo', 'r') as f:
+            return 'Raspberry Pi' in f.read() or 'BCM' in f.read()
+    except:
+        return False
+
+
+def _find_custom_model() -> Optional[str]:
+    """Find custom .ppn model for current platform."""
+    voice_dir = os.path.dirname(os.path.abspath(__file__))
+
+    if _is_raspberry_pi():
+        # Look for Raspberry Pi model
+        patterns = ['*raspberry-pi*.ppn', '*raspberry*.ppn', '*rpi*.ppn']
+    elif platform.system() == 'Darwin':
+        # macOS - check architecture
+        if platform.machine() == 'arm64':
+            patterns = ['*mac*arm64*.ppn', '*macos*arm*.ppn']
+        else:
+            patterns = ['*mac*x86*.ppn', '*macos*intel*.ppn']
+    else:
+        # Linux
+        patterns = ['*linux*.ppn']
+
+    for pattern in patterns:
+        matches = glob.glob(os.path.join(voice_dir, pattern))
+        if matches:
+            return matches[0]
+
+    return None
+
+
 class WakeWordDetector:
     """
-    Detects wake words using OpenWakeWord.
+    Detects wake words using Picovoice Porcupine.
 
-    Supports built-in models like "hey_jarvis" or custom trained models.
+    On Raspberry Pi: uses custom "hey chit" model if available
+    On Mac/other: uses built-in "jarvis" keyword
     """
 
-    # Built-in wake words - "hey_jarvis" sounds closest to "hey chit"
-    DEFAULT_MODEL = "hey_jarvis"
+    # Default built-in wake word (used when no custom model)
+    DEFAULT_KEYWORD = "jarvis"
 
-    # Custom model path (if trained)
-    CUSTOM_MODEL_PATH = "models/hey_chit.onnx"
+    # All available built-in keywords
+    AVAILABLE_KEYWORDS = list(pvporcupine.KEYWORDS) if PORCUPINE_AVAILABLE else []
 
-    def __init__(self, config: Optional[Config] = None, model_name: str = None):
+    def __init__(self, config: Optional[Config] = None, keyword: str = None):
         """
         Initialize wake word detector.
 
         Args:
             config: Configuration object
-            model_name: Wake word model to use (default: checks for custom hey_chit first)
+            keyword: Wake word to detect (default: auto-detect)
         """
-        if not OPENWAKEWORD_AVAILABLE:
+        if not PORCUPINE_AVAILABLE:
             raise ImportError(
-                "openwakeword not installed. Run: pip install openwakeword"
+                "pvporcupine not installed. Run: pip install pvporcupine"
             )
 
         self.config = config or default_config
+        self._custom_model_path = _find_custom_model()
 
-        # Auto-detect custom model if it exists
-        if model_name is None:
-            import os
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            custom_path = os.path.join(base_dir, self.CUSTOM_MODEL_PATH)
-            if os.path.exists(custom_path):
-                self.model_name = custom_path
-                print(f"[Using custom wake word: {custom_path}]")
-            else:
-                self.model_name = self.DEFAULT_MODEL
+        if self._custom_model_path:
+            # Use custom model - extract name from filename
+            basename = os.path.basename(self._custom_model_path)
+            self.keyword = basename.split('_')[0].replace('-', ' ')
+            print(f"[Using custom wake word model: {basename}]")
         else:
-            self.model_name = model_name
+            # Use built-in keyword
+            self.keyword = keyword or self.DEFAULT_KEYWORD
+            if self.keyword not in pvporcupine.KEYWORDS:
+                raise ValueError(
+                    f"Unknown keyword '{self.keyword}'. "
+                    f"Available: {list(pvporcupine.KEYWORDS)}"
+                )
 
-        self._model = None
-        self._running = False
-        self._callback = None
-        self._thread = None
+        self._access_key = _load_access_key()
+        if not self._access_key:
+            raise ValueError(
+                "Picovoice access key not found!\n"
+                "Get a FREE key from: https://console.picovoice.ai/\n"
+                "Then save it to .picovoice_key or set PICOVOICE_ACCESS_KEY"
+            )
+
+        self._porcupine = None
+
+    @property
+    def sample_rate(self) -> int:
+        """Required sample rate (16000 Hz)."""
+        return 16000
+
+    @property
+    def frame_length(self) -> int:
+        """Required frame length in samples."""
+        if self._porcupine:
+            return self._porcupine.frame_length
+        return 512  # Default for Porcupine
 
     def load_model(self):
-        """Load the wake word model."""
-        if self._model is None:
-            print(f"[Loading wake word model: {self.model_name}]")
-            self._model = OWWModel(
-                wakeword_models=[self.model_name],
-                inference_framework="onnx"
-            )
-            print("[Wake word model loaded]")
+        """Load the Porcupine model."""
+        if self._porcupine is None:
+            print(f"[Loading wake word: '{self.keyword}']")
 
-    def detect(self, audio_chunk: np.ndarray, threshold: float = 0.5) -> bool:
+            if self._custom_model_path:
+                # Use custom .ppn model
+                self._porcupine = pvporcupine.create(
+                    access_key=self._access_key,
+                    keyword_paths=[self._custom_model_path]
+                )
+            else:
+                # Use built-in keyword
+                self._porcupine = pvporcupine.create(
+                    access_key=self._access_key,
+                    keywords=[self.keyword]
+                )
+
+            print(f"[Wake word ready - say '{self.keyword}' to activate]")
+
+    def process(self, audio_frame: list) -> bool:
         """
-        Check if wake word is in audio chunk.
+        Process audio frame and check for wake word.
 
         Args:
-            audio_chunk: Audio samples (16kHz, int16 or float32)
-            threshold: Detection threshold (0-1)
+            audio_frame: List of int16 audio samples (must be frame_length samples)
 
         Returns:
             True if wake word detected
         """
-        if self._model is None:
+        if self._porcupine is None:
             self.load_model()
 
-        # Convert to float32 if needed
-        if audio_chunk.dtype == np.int16:
-            audio_chunk = audio_chunk.astype(np.float32) / 32768.0
+        result = self._porcupine.process(audio_frame)
+        return result >= 0
 
-        # Run prediction
-        prediction = self._model.predict(audio_chunk)
-
-        # Check if any wake word scores exceed threshold
-        for model_name, score in prediction.items():
-            if score > threshold:
-                return True
-
-        return False
-
-    def reset(self):
-        """Reset the model state between detections."""
-        if self._model:
-            self._model.reset()
+    def cleanup(self):
+        """Release resources."""
+        if self._porcupine:
+            self._porcupine.delete()
+            self._porcupine = None

@@ -16,7 +16,7 @@ sounddevice>=0.4       # Audio recording
 faster-whisper>=0.9    # Local Whisper transcription
 
 # Hands-free mode
-openwakeword>=0.5      # Wake word detection ("Hey Jarvis")
+pvporcupine>=4.0       # Wake word detection (on-device, no cloud)
 webrtcvad-wheels>=2.0.10  # Voice activity detection (silence detection)
 
 # Raspberry Pi only (uncomment on Pi)

@@ -23,9 +23,6 @@ def _load_api_key(filename: str) -> Optional[str]:
 class Config:
     """Configuration for the receipt system."""
 
-    # Backend mode: 'laptop' or 'raspberry'
-    backend: Literal['laptop', 'raspberry'] = 'laptop'
-
     # LLM settings
     llm_provider: Literal['openrouter', 'openai'] = 'openrouter'
     llm_model: str = 'openai/gpt-4o-mini'
@@ -34,17 +31,13 @@ class Config:
 
     # Whisper settings
     whisper_provider: Literal['local', 'openai'] = 'local'  # 'local' uses faster-whisper
-    whisper_model: Optional[str] = None  # Auto-set based on backend if None
+    whisper_model: str = 'medium'  # base, small, medium, large
 
     # Printer settings
     printer_vendor_id: int = 0x0416
     printer_product_id: int = 0x5011
     printer_width: int = 384  # pixels for 58mm paper
     printer_char_width: int = 40  # characters per line
-
-    # GPIO settings (Raspberry Pi only)
-    record_button_pin: int = 17  # BCM pin for record button
-    reset_button_pin: int = 27  # BCM pin for reset button
 
     # Audio settings
     sample_rate: int = 16000
@@ -64,12 +57,8 @@ class Config:
     prompts_dir: str = field(default_factory=lambda: os.path.join(os.path.dirname(__file__), 'llm'))
 
     def __post_init__(self):
-        """Ensure directories exist and set defaults based on backend."""
+        """Ensure directories exist."""
         os.makedirs(self.conversation_dir, exist_ok=True)
-
-        # Auto-select whisper model based on backend
-        if self.whisper_model is None:
-            self.whisper_model = 'base' if self.backend == 'raspberry' else 'medium'
 
     def get_system_prompt(self) -> str:
         """Load the system prompt from file."""
