@@ -197,14 +197,29 @@ def strip_memory_commands(dsl_code: str) -> str:
 
 def extract_print_block(response: str) -> str:
     """
-    Extract the <print> block from a response.
+    Extract all <print> blocks from a response, joined with sleep() between them.
     If no <print> block, returns the whole response (for backwards compatibility).
     The <reasoning> block is discarded.
     """
-    # Look for <print>...</print>
-    print_match = re.search(r'<print>\s*(.*?)\s*</print>', response, re.DOTALL)
-    if print_match:
-        return print_match.group(1)
+    # Find all <print>...</print> blocks and the text between them
+    block_pattern = re.compile(r'<print>\s*(.*?)\s*</print>', re.DOTALL)
+    print_matches = list(block_pattern.finditer(response))
+    if print_matches:
+        if len(print_matches) == 1:
+            return print_matches[0].group(1)
+        # Multiple print blocks - look for sleep() between them
+        parts = []
+        for i, match in enumerate(print_matches):
+            parts.append(match.group(1))
+            if i < len(print_matches) - 1:
+                # Get text between this </print> and next <print>
+                between_text = response[match.end():print_matches[i + 1].start()]
+                sleep_match = re.search(r'sleep\s*\(\s*(\d+\.?\d*)\s*\)', between_text)
+                if sleep_match:
+                    parts.append(f'sleep({sleep_match.group(1)})')
+                else:
+                    parts.append('sleep(2)')
+        return '\n'.join(parts)
 
     # No <print> block — check if there's DSL code directly
     # (backwards compatibility, or if LLM doesn't use the tags)

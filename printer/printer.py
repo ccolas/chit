@@ -137,22 +137,16 @@ class ReceiptPrinter:
             self.printer._raw(b'\x1b\x64\x01')  # ESC d 1 - feed 1 line
 
     def chirp_start(self):
-        """Two short chirps - 'listening started' signal."""
-        import time
+        """One short chirp - 'listening started' signal."""
         if not self.printer:
             self.connect()
-        self.printer._raw(b'\x1b\x64\x01')  # 1 line
-        time.sleep(0.12)
         self.printer._raw(b'\x1b\x64\x01')  # 1 line
 
     def chirp_stop(self):
-        """Two longer chirps - 'listening stopped' signal."""
-        import time
+        """One short chirp - 'listening stopped' signal."""
         if not self.printer:
             self.connect()
-        self.printer._raw(b'\x1b\x64\x02')  # 2 lines
-        time.sleep(0.15)
-        self.printer._raw(b'\x1b\x64\x02')  # 2 lines
+        self.printer._raw(b'\x1b\x64\x01')  # 1 line
 
     def double_chirp(self):
         """Alias for chirp_start."""
@@ -365,41 +359,56 @@ class ReceiptPrinter:
         if not self.printer:
             self.connect()
 
-        # Extract and execute chirp commands (before printing)
-        # chirp() or chirp(N) where N is number of chirps
         import time
-        chirp_pattern = re.compile(r'^\s*chirp\s*\((\d*)\)\s*$', re.MULTILINE)
 
-        def execute_chirp(match):
-            count = int(match.group(1)) if match.group(1) else 1
-            count = min(count, 5)  # Max 5 chirps
-            for i in range(count):
-                self.chirp(1)
-                if i < count - 1:
-                    time.sleep(0.12)
-            return ''  # Remove from code
+        # Split code on sleep() commands into segments
+        sleep_pattern = re.compile(r'^\s*sleep\s*\(\s*(\d+\.?\d*)\s*\)\s*$', re.MULTILINE)
+        segments = sleep_pattern.split(code)
+        # segments alternates: [code, sleep_time, code, sleep_time, code, ...]
 
-        code = chirp_pattern.sub(execute_chirp, code)
+        for i, segment in enumerate(segments):
+            if i % 2 == 1:
+                # This is a sleep duration
+                duration = min(float(segment), 7)  # Max 10 seconds
+                time.sleep(duration)
+                continue
 
-        if not PIL_AVAILABLE:
-            # Can't render DSL without PIL, fall back to plain text
-            # Strip the DSL commands and just print content
-            self._print_text_only(code, None)
-            return
+            segment = segment.strip()
+            if not segment:
+                continue
 
-        try:
-            # Render DSL to image
-            dsl = ChitDSL(width=self.config.printer_width, font_dir=self.config.font_dir)
-            img = dsl.render(code)
+            # Extract and execute chirp commands
+            chirp_pattern = re.compile(r'^\s*chirp\s*\((\d*)\)\s*$', re.MULTILINE)
 
-            # Print
-            self.printer.image(img, impl='bitImageColumn')
-            self.printer.text("\n\n\n\n")  # margin for cutting
+            def execute_chirp(match):
+                count = int(match.group(1)) if match.group(1) else 1
+                count = min(count, 5)  # Max 5 chirps
+                for j in range(count):
+                    self.chirp(1)
+                    if j < count - 1:
+                        time.sleep(0.12)
+                return ''  # Remove from code
 
-        except Exception as e:
-            # If DSL parsing fails, fall back to plain text
-            print(f"[DSL parse error: {e}, falling back to plain text]")
-            self._print_text_only(code, None)
+            segment = chirp_pattern.sub(execute_chirp, segment).strip()
+            if not segment:
+                continue
+
+            if not PIL_AVAILABLE:
+                self._print_text_only(segment, None)
+                continue
+
+            try:
+                # Render DSL to image
+                dsl = ChitDSL(width=self.config.printer_width, font_dir=self.config.font_dir)
+                img = dsl.render(segment)
+
+                # Print
+                self.printer.image(img, impl='bitImageColumn')
+                self.printer.text("\n\n")  # margin for cutting
+
+            except Exception as e:
+                print(f"[DSL parse error: {e}, falling back to plain text]")
+                self._print_text_only(segment, None)
 
     def print_response(self, text: str):
         """

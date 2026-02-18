@@ -44,7 +44,8 @@ class LLMClient:
         self.config = config or default_config
         self.conversation: List[Dict[str, str]] = []
         self._base_system_prompt = self.config.get_system_prompt()
-        self._conversation_start: Optional[str] = None  # Timestamp when conversation started
+        self._conv_name: str = getattr(config, 'conv_name', None) or 'default'
+        self._load_conversation()
 
     @property
     def system_prompt(self) -> str:
@@ -85,10 +86,6 @@ class LLMClient:
         Returns:
             The assistant's response
         """
-        # Start new conversation if needed
-        if self._conversation_start is None:
-            self._conversation_start = datetime.now().strftime("%Y%m%d_%H%M%S")
-
         # Add timestamp to user message so Chit knows when they're talking
         timestamp = datetime.now().strftime("%A, %B %d at %I:%M %p")
         message_with_time = f"[{timestamp}]\n{user_message}"
@@ -321,6 +318,35 @@ class LLMClient:
         # Return last response even if still invalid - let caller handle it
         return response
 
+    def _conv_path(self) -> str:
+        """Get path for current conversation file."""
+        os.makedirs(self.config.conversation_dir, exist_ok=True)
+        return os.path.join(self.config.conversation_dir, f"{self._conv_name}.json")
+
+    def _load_conversation(self, max_turns: int = 30):
+        """Load conversation from disk."""
+        path = self._conv_path()
+        if not os.path.exists(path):
+            return
+
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+
+            messages = data.get("messages", [])
+            if not messages:
+                return
+
+            # Keep last N turns (each turn = user + assistant = 2 messages)
+            max_messages = max_turns * 2
+            if len(messages) > max_messages:
+                messages = messages[-max_messages:]
+
+            self.conversation = messages
+            print(f"[Loaded {len(messages)} messages from '{self._conv_name}']")
+        except Exception as e:
+            print(f"[Could not load conversation: {e}]")
+
     def reset_conversation(self, reason: str = "user_request"):
         """
         Reset the conversation history.
@@ -331,22 +357,15 @@ class LLMClient:
         if self.conversation:
             print(f"[Conversation reset: {reason}]")
         self.conversation = []
-        self._conversation_start = None
+        self._save_conversation()
 
     def _save_conversation(self):
-        """Save conversation to disk (overwrites file for this conversation)."""
-        if not self.conversation or not self._conversation_start:
+        """Save conversation to disk."""
+        if not self.conversation:
             return
 
-        # Use conversation start timestamp in filename
-        filename = f"conversation_{self._conversation_start}.json"
-        filepath = os.path.join(self.config.conversation_dir, filename)
-
-        # Save conversation
-        os.makedirs(self.config.conversation_dir, exist_ok=True)
-        with open(filepath, 'w') as f:
+        with open(self._conv_path(), 'w') as f:
             json.dump({
-                "started": self._conversation_start,
                 "last_updated": datetime.now().strftime("%Y%m%d_%H%M%S"),
                 "messages": self.conversation
             }, f, indent=2)

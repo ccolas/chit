@@ -241,7 +241,7 @@ class ChitDSL:
             self._execute_command(cmd, draw, state)
 
         # Crop to content
-        img = img.crop((0, 0, self.width, state.y + 20))
+        img = img.crop((0, 0, self.width, state.y + 5))
 
         # Convert to 1-bit for thermal printing
         img = img.convert('1')
@@ -263,7 +263,7 @@ class ChitDSL:
             return
 
         content = str(args[0])
-        size = kwargs.get('size', self.default_size)
+        size = max(kwargs.get('size', self.default_size), 12)
         font_name = kwargs.get('font', self.default_font)
         bold = kwargs.get('bold', False)
         italic = kwargs.get('italic', False)
@@ -358,8 +358,9 @@ class ChitDSL:
             return
 
         content = str(args[0])
-        size = kwargs.get('size', 18)
+        size = max(kwargs.get('size', 18), 12)
         font_name = kwargs.get('font', 'iosevka')
+        align = kwargs.get('align', 'left')
 
         font = self.get_font(font_name, size, bold=False, italic=False)
 
@@ -384,11 +385,33 @@ class ChitDSL:
         char_bbox = font.getbbox('M')
         line_height = int((char_bbox[3] - char_bbox[1]) * 1.1)
 
+        # For centering, find the widest line to center the block as a whole
+        stripped_lines = []
         for line in lines:
-            # Preserve spacing relative to minimum indent
             if line.strip():
-                line = line[min_indent:] if len(line) > min_indent else line
-            draw.text((state.left_margin, state.y), line, font=font, fill='black')
+                stripped_lines.append(line[min_indent:] if len(line) > min_indent else line)
+            else:
+                stripped_lines.append(line)
+
+        if align == 'center':
+            max_width = max(
+                (font.getbbox(l)[2] - font.getbbox(l)[0] if l.strip() else 0)
+                for l in stripped_lines
+            )
+            usable_width = self.width - state.left_margin - state.right_margin
+            block_offset = max((usable_width - max_width) // 2, 0)
+        elif align == 'right':
+            max_width = max(
+                (font.getbbox(l)[2] - font.getbbox(l)[0] if l.strip() else 0)
+                for l in stripped_lines
+            )
+            usable_width = self.width - state.left_margin - state.right_margin
+            block_offset = max(usable_width - max_width, 0)
+        else:
+            block_offset = 0
+
+        for line in stripped_lines:
+            draw.text((state.left_margin + block_offset, state.y), line, font=font, fill='black')
             state.y += line_height
 
     def _cmd_rect(self, args: List, kwargs: Dict, draw: ImageDraw.ImageDraw, state: DrawState):

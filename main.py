@@ -194,7 +194,7 @@ class HandsFreeAssistant:
         print(f"LLM: {self.config.llm_model}")
         print(f"Whisper: {self.config.whisper_provider} ({self.config.whisper_model})")
         print()
-        print("Say 'Jarvis' to activate (or press Enter)")
+        print("Say the wake word to activate (or press Enter)")
         print("Recording stops automatically when you pause speaking")
         print()
 
@@ -399,12 +399,18 @@ def main():
         action='store_true',
         help='Type messages instead of voice input'
     )
+    parser.add_argument(
+        '--conv',
+        default='default',
+        help='Conversation name to load/save (default: "default")'
+    )
 
     args = parser.parse_args()
 
     config_kwargs = {
         'llm_model': args.model,
         'whisper_provider': args.whisper,
+        'conv_name': args.conv,
     }
     if args.whisper_model:
         config_kwargs['whisper_model'] = args.whisper_model

@@ -42,6 +42,9 @@ class Config:
     # Audio settings
     sample_rate: int = 16000
 
+    # Conversation
+    conv_name: str = 'default'
+
     # Conversation settings
     max_context_messages: int = 50  # Only send last N messages to LLM (sliding window)
     conversation_dir: str = field(default_factory=lambda: os.path.join(REPO_PATH, 'conversations'))

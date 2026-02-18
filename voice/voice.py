@@ -13,6 +13,25 @@ import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
 
+
+def _get_device_sample_rate() -> int:
+    """Get the default input device's native sample rate."""
+    try:
+        device_info = sd.query_devices(kind='input')
+        return int(device_info['default_samplerate'])
+    except Exception:
+        return 16000
+
+
+def _resample(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
+    """Resample int16 audio using linear interpolation."""
+    if from_rate == to_rate:
+        return audio
+    target_len = int(len(audio) * to_rate / from_rate)
+    indices = np.linspace(0, len(audio) - 1, target_len)
+    resampled = np.interp(indices, np.arange(len(audio)), audio.astype(np.float32))
+    return resampled.astype(np.int16)
+
 try:
     from openai import OpenAI
     OPENAI_AVAILABLE = True
@@ -50,6 +69,7 @@ class VoiceRecorder:
             config: Configuration object
         """
         self.config = config or default_config
+        self._device_rate = _get_device_sample_rate()
         self._stream = None
         self._frames = []
         self._recording = False
@@ -60,14 +80,14 @@ class VoiceRecorder:
         self._recording = True
 
         self._stream = sd.RawInputStream(
-            samplerate=self.config.sample_rate,
+            samplerate=self._device_rate,
             channels=1,
             dtype='int16',
             blocksize=1024,
             callback=self._audio_callback
         )
         self._stream.start()
-        print("[Recording...]")
+        print(f"[Recording at {self._device_rate}Hz...]")
 
     def _audio_callback(self, indata, frames, time, status):
         """Callback for audio stream."""
@@ -91,8 +111,8 @@ class VoiceRecorder:
             self._stream.close()
             self._stream = None
 
-        # Calculate duration: frames * buffer_size / sample_rate
-        duration = len(self._frames) * 1024 / self.config.sample_rate
+        # Calculate duration: frames * buffer_size / device_rate
+        duration = len(self._frames) * 1024 / self._device_rate
 
         if duration < min_duration:
             print(f"[Recording too short ({duration:.1f}s < {min_duration}s), cancelled]")
@@ -100,6 +120,10 @@ class VoiceRecorder:
             return None
 
         print(f"[Recording stopped ({duration:.1f}s)]")
+
+        # Resample to 16kHz for Whisper
+        raw_audio = np.frombuffer(b''.join(self._frames), dtype=np.int16)
+        audio_16k = _resample(raw_audio, self._device_rate, 16000)
 
         # Save to temporary WAV file
         temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
@@ -109,8 +133,8 @@ class VoiceRecorder:
         with wave.open(temp_path, 'wb') as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)  # 16-bit
-            wf.setframerate(self.config.sample_rate)
-            wf.writeframes(b''.join(self._frames))
+            wf.setframerate(16000)
+            wf.writeframes(audio_16k.tobytes())
 
         self._frames = []
         return temp_path
@@ -284,17 +308,18 @@ class HandsFreeVoiceInput:
             on_recording_stop: Callback when recording ends (e.g., printer.long_chirp)
         """
         self.config = config or default_config
+        self._device_rate = _get_device_sample_rate()
         self.transcriber = Transcriber(config)
         self._running = False
         self._led_callback = led_callback
         self._on_recording_start = on_recording_start
         self._on_recording_stop = on_recording_stop
 
-        # VAD for detecting speech end
+        # VAD for detecting speech end (always at 16kHz - we resample)
         if VAD_AVAILABLE:
             self._vad = VoiceActivityDetector(
-                sample_rate=self.config.sample_rate,
-                aggressiveness=2
+                sample_rate=16000,
+                aggressiveness=3
             )
         else:
             self._vad = None
@@ -353,7 +378,9 @@ class HandsFreeVoiceInput:
         import queue
         import time
 
-        frame_length = self._wake_detector.frame_length
+        frame_length = self._wake_detector.frame_length  # 512 samples at 16kHz
+        # How many native-rate samples correspond to one Porcupine frame
+        native_frame_length = int(frame_length * self._device_rate / 16000)
         audio_queue = queue.Queue()
         frame_buffer = []
 
@@ -361,10 +388,10 @@ class HandsFreeVoiceInput:
             audio_queue.put(bytes(indata))
 
         stream = sd.RawInputStream(
-            samplerate=self._wake_detector.sample_rate,
+            samplerate=self._device_rate,
             channels=1,
             dtype='int16',
-            blocksize=frame_length,
+            blocksize=native_frame_length,
             callback=audio_callback
         )
         stream.start()
@@ -372,7 +399,7 @@ class HandsFreeVoiceInput:
         start_time = time.time()
         detected = False
 
-        print(f"[Listening for '{self._wake_detector.keyword}'...]")
+        print(f"[Listening for '{self._wake_detector.keyword}' at {self._device_rate}Hz...]")
 
         try:
             while self._running:
@@ -384,15 +411,23 @@ class HandsFreeVoiceInput:
                     audio_chunk = np.frombuffer(audio_data, dtype=np.int16)
                     frame_buffer.extend(audio_chunk.tolist())
 
-                    # Process when we have enough samples
-                    while len(frame_buffer) >= frame_length:
-                        frame = frame_buffer[:frame_length]
-                        frame_buffer = frame_buffer[frame_length:]
+                    # Process when we have enough native-rate samples for one 16kHz frame
+                    while len(frame_buffer) >= native_frame_length:
+                        native_frame = np.array(frame_buffer[:native_frame_length], dtype=np.int16)
+                        frame_buffer = frame_buffer[native_frame_length:]
 
-                        amplitude = max(abs(min(frame)), abs(max(frame)))
+                        # Resample to 16kHz for Porcupine
+                        frame_16k = _resample(native_frame, self._device_rate, 16000)
+                        # Ensure exact frame_length
+                        if len(frame_16k) > frame_length:
+                            frame_16k = frame_16k[:frame_length]
+                        elif len(frame_16k) < frame_length:
+                            frame_16k = np.pad(frame_16k, (0, frame_length - len(frame_16k)))
+
+                        amplitude = max(abs(int(native_frame.min())), abs(int(native_frame.max())))
                         print(f"[amp: {amplitude:5d}]", end='\r')
 
-                        if self._wake_detector.process(frame):
+                        if self._wake_detector.process(frame_16k.tolist()):
                             print(f"\n[Wake word detected: '{self._wake_detector.keyword}'!]")
                             detected = True
                             break
@@ -412,7 +447,8 @@ class HandsFreeVoiceInput:
     def record_until_silence(
         self,
         max_duration: float = 30.0,
-        silence_duration: float = 2.0,
+        silence_duration: float = 1.5,
+        initial_wait: float = 5.0,
         min_speech_duration: float = 0.5
     ) -> Optional[str]:
         """
@@ -428,12 +464,14 @@ class HandsFreeVoiceInput:
         """
         self._set_led(True)
 
-        # Frame settings for VAD (30ms frames)
+        # Frame settings for VAD (30ms frames at 16kHz for VAD processing)
         import queue
         import time
 
         frame_duration_ms = 30
-        frame_size = int(self.config.sample_rate * frame_duration_ms / 1000)
+        # Record at native rate, but calculate frame size for VAD at 16kHz
+        vad_frame_size = int(16000 * frame_duration_ms / 1000)  # 480 samples at 16kHz
+        native_frame_size = int(self._device_rate * frame_duration_ms / 1000)
 
         audio_queue = queue.Queue()
 
@@ -441,10 +479,10 @@ class HandsFreeVoiceInput:
             audio_queue.put(bytes(indata))
 
         stream = sd.RawInputStream(
-            samplerate=self.config.sample_rate,
+            samplerate=self._device_rate,
             channels=1,
             dtype='int16',
-            blocksize=frame_size,
+            blocksize=native_frame_size,
             callback=audio_callback
         )
         stream.start()
@@ -456,7 +494,7 @@ class HandsFreeVoiceInput:
         started_speaking = False
 
         start_time = time.time()
-        print("[Recording... (speak now)]")
+        print(f"[Recording at {self._device_rate}Hz... (speak now)]")
 
         # Signal recording started
         if self._on_recording_start:
@@ -480,13 +518,22 @@ class HandsFreeVoiceInput:
                     continue
                 frames.append(audio_bytes)
 
+                # Resample to 16kHz for VAD
+                native_audio = np.frombuffer(audio_bytes, dtype=np.int16)
+                audio_16k = _resample(native_audio, self._device_rate, 16000)
+                audio_16k_bytes = audio_16k.tobytes()
+
                 # Check for speech using VAD
                 if self._vad:
-                    is_speech = self._vad.is_speech(audio_bytes)
+                    # Ensure correct frame size for VAD
+                    expected_bytes = vad_frame_size * 2
+                    if len(audio_16k_bytes) >= expected_bytes:
+                        is_speech = self._vad.is_speech(audio_16k_bytes[:expected_bytes])
+                    else:
+                        is_speech = False
                 else:
                     # Fallback: use simple energy detection
-                    audio = np.frombuffer(audio_bytes, dtype=np.int16)
-                    energy = np.sqrt(np.mean(audio.astype(np.float32) ** 2))
+                    energy = np.sqrt(np.mean(native_audio.astype(np.float32) ** 2))
                     is_speech = energy > 500  # Threshold
 
                 if is_speech:
@@ -495,13 +542,25 @@ class HandsFreeVoiceInput:
                     if not started_speaking:
                         started_speaking = True
                         print("[Speech detected]")
+                    elif silence_frames > 0:
+                        # Was counting silence but VAD triggered again
+                        print(f"[VAD re-triggered after {silence_frames} silent frames]", end='\r')
                 else:
+                    if started_speaking and silence_frames == 0:
+                        print("[Silence started...]")
+                    silence_frames += 1
                     if started_speaking:
-                        silence_frames += 1
+                        print(f"[silence: {silence_frames}/{silence_threshold}]", end='\r')
 
-                # Stop if enough silence after speech
-                if started_speaking and silence_frames >= silence_threshold:
-                    print(f"[Silence detected, stopping]")
+                # Before speech: give up after initial_wait seconds of total silence
+                if not started_speaking:
+                    initial_wait_frames = int(initial_wait * 1000 / frame_duration_ms)
+                    if silence_frames >= initial_wait_frames:
+                        print(f"\n[No speech detected after {initial_wait}s, cancelling]")
+                        break
+                # After speech: stop after silence_duration seconds of silence
+                elif silence_frames >= silence_threshold:
+                    print(f"\n[Silence detected, stopping]")
                     break
 
         finally:
@@ -522,11 +581,13 @@ class HandsFreeVoiceInput:
             print(f"[Too little speech ({speech_duration:.1f}s), cancelled]")
             return None
 
-        # Combine frames and trim silence
-        audio_data = b''.join(frames)
+        # Combine frames and resample to 16kHz
+        raw_audio = np.frombuffer(b''.join(frames), dtype=np.int16)
+        audio_16k = _resample(raw_audio, self._device_rate, 16000)
+        audio_data = audio_16k.tobytes()
 
         if VAD_AVAILABLE:
-            audio_data = trim_silence(audio_data, self.config.sample_rate)
+            audio_data = trim_silence(audio_data, 16000)
 
         # Save to temp file
         temp_file = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
@@ -536,10 +597,10 @@ class HandsFreeVoiceInput:
         with wave.open(temp_path, 'wb') as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
-            wf.setframerate(self.config.sample_rate)
+            wf.setframerate(16000)
             wf.writeframes(audio_data)
 
-        duration = len(audio_data) / 2 / self.config.sample_rate
+        duration = len(audio_data) / 2 / 16000
         print(f"[Recorded {duration:.1f}s of audio]")
 
         return temp_path

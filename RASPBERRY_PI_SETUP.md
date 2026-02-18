@@ -74,31 +74,6 @@ ssh username@chit.local
 ssh username@100.x.x.x
 ```
 
-### If SSH key auth fails
-
-Enable password authentication on the Pi:
-```bash
-sudo nano /etc/ssh/sshd_config
-```
-
-Ensure this line exists (uncommented):
-```
-PasswordAuthentication yes
-```
-
-Also check for override files:
-```bash
-cat /etc/ssh/sshd_config.d/*
-```
-
-Change any `PasswordAuthentication no` to `yes`.
-
-Then:
-```bash
-sudo systemctl restart ssh
-passwd  # set a password if you haven't
-```
-
 ---
 
 ## 4. Install Dependencies
@@ -107,12 +82,6 @@ passwd  # set a password if you haven't
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y python3-pip python3-venv libportaudio2 portaudio19-dev \
     libusb-1.0-0-dev libudev-dev git
-```
-
-Fix locale warnings (optional):
-```bash
-sudo apt install -y locales-all
-sudo touch /var/lib/cloud/instance/locale-check.skip
 ```
 
 ---
@@ -139,11 +108,24 @@ Log out and back in for group changes to take effect.
 git clone <your-repo-url> ~/chit
 cd ~/chit
 
-python3 -m venv venv
-source venv/bin/activate
+conda create -n chit python=3.11 -y
+conda activate chit
 
 pip install -r requirements.txt
-pip install RPi.GPIO
+```
+
+### Syncing code changes from your computer
+
+After making changes locally, sync to the Pi without overwriting its conversations or memories:
+
+```bash
+rsync -avz \
+  --exclude='conversations/' \
+  --exclude='memory/' \
+  --exclude='.idea/' \
+  --exclude='__pycache__/' \
+  --exclude='costs.txt' \
+  /path/to/chit user@your-pi-hostname:~/
 ```
 
 ---
@@ -165,19 +147,25 @@ source ~/.bashrc
 
 ```bash
 cd ~/chit
-source venv/bin/activate
+conda activate chit
 
-# Raspberry Pi mode with GPIO buttons
-python main.py --backend raspberry
+# Hands-free mode with wake word detection
+python main.py --hands-free
 
-# Hands-free mode (wake word: "Hey Jarvis")
-python main.py --backend raspberry --hands-free
+# Loading a conversation
+python main.py --hands-free --conv default
 
 # Text mode (type instead of speak)
-python main.py --backend raspberry --text
+python main.py --text
+
+# Text mode (type instead of speak, no print)
+python main.py --text --no-print
 
 # Smaller Whisper model for better performance
-python main.py --backend raspberry --whisper-model base
+python main.py --hands-free --whisper-model base
+
+# Use OpenAI Whisper API instead of local
+python main.py --hands-free --whisper openai
 ```
 
 ---
@@ -191,10 +179,10 @@ Description=Chit Receipt Printer
 After=network.target
 
 [Service]
-User=cedric
-WorkingDirectory=/home/cedric/chit
+User=your-username
+WorkingDirectory=/home/your-username/chit
 Environment="OPENROUTER_API_KEY=your-key"
-ExecStart=/home/cedric/chit/venv/bin/python main.py --backend raspberry --hands-free
+ExecStart=/home/your-username/miniconda3/envs/chit/bin/python main.py --hands-free
 Restart=always
 
 [Install]
