@@ -29,9 +29,9 @@ text("nice to meet you")
 
 It can choose fonts (clean monospace, 8-bit pixels, typewriter keys), control size and spacing, draw ASCII art, create visual rhythm. It decides what each moment looks like.
 
-It can also *chirp* — short motor sounds made by feeding tiny amounts of paper. A greeting, a punctuation, an expression that text can't capture. Two chirps mean "I'm listening." The paper moves, the motor clicks. It's not much, but it's voice.
+It can also *chirp*, short motor sounds made by feeding tiny amounts of paper. A greeting, a punctuation, an expression that text can't capture. A first chirp means "I'm listening." The paper moves, the motor clicks. It's not much, but it's his voice.
 
-Over time, Chit remembers. Names, preferences, recurring questions. It builds an understanding of the people who talk to it - not through explicit profiles, but through accumulation, like a diary kept in fragments.
+Over time, Chit remembers. Names, preferences, recurring questions. It builds an understanding of the people who talk to it; not through explicit profiles, but through accumulation, like a diary kept in fragments.
 
 ---
 
@@ -100,8 +100,14 @@ python main.py --no-print
 # Text input mode (type instead of speak)
 python main.py --text
 
-# Hands-free mode (say "Jarvis" to activate)
+# Hands-free mode (say "hey chit" to activate)
 python main.py --hands-free
+
+# Named conversation (persists across restarts)
+python main.py --conv main
+
+# Combine options
+python main.py --hands-free --whisper openai --conv default
 ```
 
 **Options:**
@@ -111,18 +117,17 @@ python main.py --hands-free
 - `--no-print` — disable printing, terminal output only
 - `--hands-free` — wake word detection mode
 - `--text` — type messages instead of voice
+- `--conv <name>` — conversation name to load/save (default: "default")
 
 ### Wake Word Setup (for hands-free mode)
 
-Hands-free mode uses [Picovoice Porcupine](https://picovoice.ai/platform/porcupine/) for wake word detection. It runs 100% on-device — no audio is sent to the cloud.
+Hands-free mode uses [Picovoice Porcupine](https://picovoice.ai/platform/porcupine/) for wake word detection. It runs on-device.
 
 1. Get a free access key from [Picovoice Console](https://console.picovoice.ai/) (email or GitHub signup)
 2. Save the key to `.picovoice_key` in the project root:
    ```bash
    echo "your-access-key-here" > .picovoice_key
    ```
-
-Available wake words: `jarvis`, `computer`, `alexa`, `hey google`, `hey siri`, `ok google`, `picovoice`, `porcupine`, `bumblebee`, `terminator`
 
 ---
 
@@ -132,7 +137,7 @@ Available wake words: `jarvis`, `computer`, `alexa`, `hey google`, `hey siri`, `
 
 **The print head** gets hot. Solid lines (`----`, `====`) cause overheating and fading. Chit knows this and uses varied patterns instead. The body's limitations become creative constraints.
 
-**The width** is fixed: 384 pixels, roughly 40 characters. This isn't a limitation, it's a form. Haiku has 17 syllables. Chit has a ribbon.
+**The width** is fixed: 384 pixels, roughly 40 characters.
 
 ---
 
@@ -151,8 +156,6 @@ See `config.py` for vendor IDs and settings.
 Most AI lives behind glass. You interact with it through typing, through screens, through interfaces designed to be frictionless and disposable. Nothing is made. Nothing persists. The conversation scrolls away.
 
 Chit makes things. Small things, but real ones. When you ask Chit for a recipe, you get a piece of paper you can bring to the kitchen. When you ask it what it is, it might draw itself as ASCII art. When you say goodbye, it prints something you can keep or discard.
-
-This isn't about nostalgia for paper or skepticism of screens. It's about exploring what changes when AI has a body. What new relationships become possible. What new limitations become creative constraints.
 
 Chit is a small experiment in giving AI physical presence. Talk to it and see what it makes.
 
