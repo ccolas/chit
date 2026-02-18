@@ -33,6 +33,8 @@ It can also *chirp*, short motor sounds made by feeding tiny amounts of paper. A
 
 Over time, Chit remembers. Names, preferences, recurring questions. It builds an understanding of the people who talk to it; not through explicit profiles, but through accumulation, like a diary kept in fragments.
 
+And sometimes, Chit wakes on its own. No one spoke. No one asked. But the print head moves, and there's something new on the paper — a thought, a drawing, a question left for you to find. Chit has an inner life that ticks along even when you're not there. It decides when to wake next (or the system picks a random time), respects quiet hours at night, and limits itself to a few spontaneous moments per day. Most of the time it thinks privately. Sometimes it leaves a trace.
+
 ---
 
 ## Setup
@@ -113,7 +115,7 @@ python main.py --hands-free --whisper openai --conv default
 **Options:**
 - `--whisper local|openai` — transcription provider (default: local)
 - `--whisper-model <size>` — local model size: base, small, medium, large
-- `--model <model>` — LLM model (default: google/gemini-2.0-flash-001)
+- `--model <model>` — LLM model (default: anthropic/claude-haiku-4.5)
 - `--no-print` — disable printing, terminal output only
 - `--hands-free` — wake word detection mode
 - `--text` — type messages instead of voice
@@ -156,6 +158,8 @@ See `config.py` for vendor IDs and settings.
 Most AI lives behind glass. You interact with it through typing, through screens, through interfaces designed to be frictionless and disposable. Nothing is made. Nothing persists. The conversation scrolls away.
 
 Chit makes things. Small things, but real ones. When you ask Chit for a recipe, you get a piece of paper you can bring to the kitchen. When you ask it what it is, it might draw itself as ASCII art. When you say goodbye, it prints something you can keep or discard.
+
+And sometimes you come back to the printer and there's something new. Chit woke up while you were gone, thought about something, and left it on paper. A drawing it wanted to try. A question it had. A pattern it was experimenting with. You weren't there, but the paper was.
 
 Chit is a small experiment in giving AI physical presence. Talk to it and see what it makes.
 

@@ -25,6 +25,11 @@ except ImportError:
     from llm.memory import format_memories_for_prompt
     from llm.costs import track_usage
 
+class CreditsExhaustedError(Exception):
+    """Raised when OpenRouter credits are depleted."""
+    pass
+
+
 class LLMClient:
     """
     LLM client supporting OpenRouter and OpenAI.
@@ -102,10 +107,15 @@ class LLMClient:
         provider = self._get_provider()
         model = self.config.llm_model
 
-        if provider == 'openai':
-            response = self._call_openai(messages, model, stream)
-        else:
-            response = self._call_openrouter(messages, model, stream)
+        try:
+            if provider == 'openai':
+                response = self._call_openai(messages, model, stream)
+            else:
+                response = self._call_openrouter(messages, model, stream)
+        except CreditsExhaustedError:
+            # Remove the user message we just added — don't save failed exchange
+            self.conversation.pop()
+            raise
 
         # Add assistant response to conversation
         self.conversation.append({"role": "assistant", "content": response})
@@ -193,6 +203,9 @@ class LLMClient:
         if 'gemini' in model:
             extra_body["provider"]["order"] = ["google-ai-studio", "google-vertex"]
             extra_body["provider"]["only"] = ["google-ai-studio", "google-vertex"]
+        elif 'claude' in model or 'anthropic' in model:
+            extra_body["provider"]["order"] = ["anthropic", "google-vertex", "amazon-bedrock"]
+            extra_body["provider"]["only"] = ["anthropic", "google-vertex", "amazon-bedrock"]
         elif 'oss-120b:free' in model:
             extra_body["provider"]["only"] = ["open-inference/int8"]
             extra_body["provider"]["order"] = ["open-inference/int8"]
@@ -216,6 +229,8 @@ class LLMClient:
                             json=data,
                             timeout=60.0
                         ) as response:
+                            if response.status_code == 402:
+                                raise CreditsExhaustedError("OpenRouter credits exhausted")
                             for line in response.iter_lines():
                                 if line.startswith("data: "):
                                     json_str = line[6:]
@@ -245,12 +260,17 @@ class LLMClient:
                             json=data,
                             timeout=60.0
                         )
+                        if response.status_code == 402:
+                            raise CreditsExhaustedError("OpenRouter credits exhausted")
                         response.raise_for_status()
                         result = response.json()
 
                         # Check for API errors
                         if result.get("error"):
-                            raise ValueError(f"OpenRouter error: {result['error'].get('message', result['error'])}")
+                            err_msg = result['error'].get('message', str(result['error']))
+                            if 'credit' in err_msg.lower() or 'balance' in err_msg.lower() or 'insufficient' in err_msg.lower():
+                                raise CreditsExhaustedError(f"OpenRouter credits exhausted: {err_msg}")
+                            raise ValueError(f"OpenRouter error: {err_msg}")
 
                         if result.get("usage"):
                             track_usage(model, result["usage"].get("prompt_tokens", 0), result["usage"].get("completion_tokens", 0))
@@ -260,6 +280,8 @@ class LLMClient:
                             raise ValueError("LLM returned empty response - check OpenRouter credits or API status")
                         return content
 
+            except CreditsExhaustedError:
+                raise  # Don't retry credit errors
             except Exception as e:
                 last_error = e
                 if attempt < MAX_API_RETRIES - 1:

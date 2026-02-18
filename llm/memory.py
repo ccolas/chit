@@ -15,7 +15,7 @@ import os
 import re
 from pathlib import Path
 from datetime import datetime
-from typing import Tuple, List
+from typing import Optional, Tuple, List
 
 
 MEMORY_DIR = Path(__file__).parent.parent / "memory"
@@ -224,6 +224,18 @@ def extract_print_block(response: str) -> str:
     # No <print> block — check if there's DSL code directly
     # (backwards compatibility, or if LLM doesn't use the tags)
     return response
+
+
+def extract_wake_in(response: str) -> Optional[float]:
+    """
+    Extract wake_in(N) from response text.
+    Returns hours as float, clamped to 1/60 (1 min) to 12, or None if not found.
+    """
+    match = re.search(r'wake_in\(\s*([\d.]+)\s*\)', response)
+    if match:
+        hours = float(match.group(1))
+        return max(1/60, min(12.0, hours))
+    return None
 
 
 def process_chit_response(dsl_code: str) -> str:

@@ -25,7 +25,7 @@ class Config:
 
     # LLM settings
     llm_provider: Literal['openrouter', 'openai'] = 'openrouter'
-    llm_model: str = 'openai/gpt-4o-mini'
+    llm_model: str = 'anthropic/claude-haiku-4.5'
     openrouter_api_key: Optional[str] = field(default_factory=lambda: _load_api_key('.api_openrouter') or os.environ.get('OPENROUTER_API_KEY'))
     openai_api_key: Optional[str] = field(default_factory=lambda: _load_api_key('.api_openai') or os.environ.get('OPENAI_API_KEY'))
 
@@ -64,12 +64,23 @@ class Config:
         os.makedirs(self.conversation_dir, exist_ok=True)
 
     def get_system_prompt(self) -> str:
-        """Load the system prompt from file."""
+        """Load the system prompt from file, plus optional personal prompt."""
         prompt_path = os.path.join(self.prompts_dir, 'system.md')
         if os.path.exists(prompt_path):
             with open(prompt_path, 'r') as f:
-                return f.read()
-        return self._default_system_prompt()
+                prompt = f.read()
+        else:
+            prompt = self._default_system_prompt()
+
+        # Append personal prompt if it exists (gitignored, for personal context)
+        personal_path = os.path.join(REPO_PATH, 'personal_prompt.md')
+        if os.path.exists(personal_path):
+            with open(personal_path, 'r') as f:
+                personal = f.read().strip()
+            if personal:
+                prompt += "\n\n" + personal
+
+        return prompt
 
     def _default_system_prompt(self) -> str:
         """Fallback system prompt if file not found."""

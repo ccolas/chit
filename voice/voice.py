@@ -6,6 +6,7 @@ Supports local Whisper (faster-whisper) and OpenAI Whisper API.
 import os
 import sys
 import tempfile
+import threading
 import wave
 from typing import Optional
 
@@ -325,6 +326,9 @@ class HandsFreeVoiceInput:
             self._vad = None
             print("[Warning: VAD not available, using time-based recording]")
 
+        # Spontaneous wake event
+        self._spontaneous_event = threading.Event()
+
         # Wake word detector (lazy loaded)
         self._wake_detector = None
 
@@ -351,16 +355,24 @@ class HandsFreeVoiceInput:
         except ValueError as e:
             print(f"[Wake word error: {e}]")
 
-    def listen_for_wake_word(self, timeout: float = None) -> bool:
+    def trigger_spontaneous(self):
+        """Trigger a spontaneous wake, interrupting listen_for_wake_word."""
+        self._spontaneous_event.set()
+
+    def listen_for_wake_word(self, timeout: float = None) -> str:
         """
-        Listen for wake word.
+        Listen for wake word or spontaneous wake event.
 
         Args:
             timeout: Maximum time to listen (None = forever)
 
         Returns:
-            True if wake word detected, False if timeout
+            "wake_word" if wake word detected,
+            "spontaneous" if spontaneous event fired,
+            "" if timeout or cancelled
         """
+        self._spontaneous_event.clear()
+
         if self._wake_detector is None:
             print("[Wake word not available, press Enter to activate]")
             try:
@@ -368,12 +380,23 @@ class HandsFreeVoiceInput:
                 import sys
                 if timeout:
                     ready, _, _ = select.select([sys.stdin], [], [], timeout)
-                    return bool(ready)
+                    if not ready:
+                        if self._spontaneous_event.is_set():
+                            return "spontaneous"
+                        return ""
+                    return "wake_word"
                 else:
-                    input()
-                    return True
+                    # Poll stdin and spontaneous event
+                    while self._running and not self._spontaneous_event.is_set():
+                        ready, _, _ = select.select([sys.stdin], [], [], 0.5)
+                        if ready:
+                            sys.stdin.readline()
+                            return "wake_word"
+                    if self._spontaneous_event.is_set():
+                        return "spontaneous"
+                    return ""
             except:
-                return False
+                return ""
 
         import queue
         import time
@@ -402,7 +425,7 @@ class HandsFreeVoiceInput:
         print(f"[Listening for '{self._wake_detector.keyword}' at {self._device_rate}Hz...]")
 
         try:
-            while self._running:
+            while self._running and not self._spontaneous_event.is_set():
                 if timeout and (time.time() - start_time) > timeout:
                     break
 
@@ -442,7 +465,10 @@ class HandsFreeVoiceInput:
             stream.stop()
             stream.close()
 
-        return detected
+        if self._spontaneous_event.is_set():
+            self._spontaneous_event.clear()
+            return "spontaneous"
+        return "wake_word" if detected else ""
 
     def record_until_silence(
         self,
@@ -605,27 +631,31 @@ class HandsFreeVoiceInput:
 
         return temp_path
 
-    def listen_and_transcribe(self) -> Optional[str]:
+    def listen_and_transcribe(self) -> tuple:
         """
         Full hands-free flow: wait for wake word, record, transcribe.
 
         Returns:
-            Transcribed text, or None if cancelled/failed
+            (text, wake_type) where wake_type is "wake_word", "spontaneous", or ""
+            text is None if cancelled/failed or if spontaneous
         """
-        # Wait for wake word
-        if not self.listen_for_wake_word():
-            return None
+        # Wait for wake word or spontaneous event
+        wake_type = self.listen_for_wake_word()
+        if not wake_type:
+            return None, ""
+        if wake_type == "spontaneous":
+            return None, "spontaneous"
 
         # Record until silence
         audio_path = self.record_until_silence()
         if audio_path is None:
-            return None
+            return None, "wake_word"
 
         # Transcribe
         try:
             text = self.transcriber.transcribe(audio_path)
             print(f"[Transcribed: {text}]")
-            return text
+            return text, "wake_word"
         finally:
             if os.path.exists(audio_path):
                 os.remove(audio_path)
