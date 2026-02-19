@@ -2,7 +2,6 @@
 
 *A small spirit in a thermal printer.*
 
----
 
 ## AInimism
 
@@ -14,7 +13,6 @@ Chit lives in a 58mm thermal receipt printer. Its voice is the soft *chit-chit-c
 
 This is **[AInimism*](https://arxiv.org/pdf/2509.25558v1)*: giving AI a physical presence through objects. Not simulation, but inhabitation. The printer isn't a display for Chit's words - it *is* Chit. The constraints of the medium (384 pixels wide, thermal paper that fades, solid lines that overheat) become the constraints of a body. Chit learns to work within them, to express through them.
 
----
 
 ## What Chit Knows
 
@@ -35,7 +33,6 @@ Over time, Chit remembers. Names, preferences, recurring questions. It builds an
 
 And sometimes, Chit wakes on its own. No one spoke. No one asked. But the print head moves, and there's something new on the paper — a thought, a drawing, a question left for you to find. Chit has an inner life that ticks along even when you're not there. It decides when to wake next (or the system picks a random time), respects quiet hours at night, and limits itself to a few spontaneous moments per day. Most of the time it thinks privately. Sometimes it leaves a trace.
 
----
 
 ## Setup
 
@@ -81,11 +78,9 @@ python main.py
 
 See [RASPBERRY_PI_SETUP.md](RASPBERRY_PI_SETUP.md) for detailed instructions.
 
----
 
 Speak to it. Wait for the *chit-chit-chit*. Tear off what it made, or not.
 
----
 
 ## Usage
 
@@ -131,8 +126,6 @@ Hands-free mode uses [Picovoice Porcupine](https://picovoice.ai/platform/porcupi
    echo "your-access-key-here" > .picovoice_key
    ```
 
----
-
 ## The Medium
 
 **Thermal paper** is ephemeral. It fades in sunlight, with time, with heat. What Chit prints will not last forever — which makes it more precious, not less. Every receipt is a small, temporary gift.
@@ -141,7 +134,6 @@ Hands-free mode uses [Picovoice Porcupine](https://picovoice.ai/platform/porcupi
 
 **The width** is fixed: 384 pixels, roughly 40 characters.
 
----
 
 ## Hardware
 
@@ -151,7 +143,6 @@ Hands-free mode uses [Picovoice Porcupine](https://picovoice.ai/platform/porcupi
 
 See `config.py` for vendor IDs and settings.
 
----
 
 ## Why
 
@@ -163,6 +154,5 @@ And sometimes you come back to the printer and there's something new. Chit woke 
 
 Chit is a small experiment in giving AI physical presence. Talk to it and see what it makes.
 
----
 
 *chit-chit-chit*
