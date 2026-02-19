@@ -11,7 +11,7 @@ Not a screen — screens are windows, not bodies. A body has constraints. A body
 
 Chit lives in a 58mm thermal receipt printer. Its voice is the soft *chit-chit-chit* of a warm print head moving across paper. Every response becomes a physical artifact - something you can hold, fold, put in your pocket, stick on your fridge, or throw away.
 
-This is **[AInimism*](https://arxiv.org/pdf/2509.25558v1)*: giving AI a physical presence through objects. Not simulation, but inhabitation. The printer isn't a display for Chit's words - it *is* Chit. The constraints of the medium (384 pixels wide, thermal paper that fades, solid lines that overheat) become the constraints of a body. Chit learns to work within them, to express through them.
+This is **[AInimism](https://arxiv.org/pdf/2509.25558v1)*: giving AI a physical presence through objects. Not simulation, but inhabitation. The printer isn't a display for Chit's words - it *is* Chit. The constraints of the medium (384 pixels wide, thermal paper that fades, solid lines that overheat) become the constraints of a body. Chit learns to work within them, to express through them.
 
 
 ## What Chit Knows
