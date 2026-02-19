@@ -404,7 +404,6 @@ class ReceiptPrinter:
 
                 # Print
                 self.printer.image(img, impl='bitImageColumn')
-                self.printer.text("\n\n")  # margin for cutting
 
             except Exception as e:
                 print(f"[DSL parse error: {e}, falling back to plain text]")

@@ -8,11 +8,13 @@ Modes:
 """
 
 import argparse
+import os
 import random
 import signal
 import sys
 import threading
 from datetime import datetime, date, timedelta
+from pathlib import Path
 from typing import Optional
 
 try:
@@ -29,6 +31,33 @@ except ImportError:
     from printer import ReceiptPrinter, validate_dsl
     from voice import VoiceInput, HandsFreeVoiceInput
     from llm.memory import process_chit_response, strip_memory_commands, extract_print_block, extract_wake_in
+
+WAKE_FILE = Path(__file__).parent / "memory" / "next_wake.txt"
+
+
+def _save_wake_time(target: datetime):
+    """Persist scheduled wake time to disk."""
+    WAKE_FILE.parent.mkdir(exist_ok=True)
+    WAKE_FILE.write_text(target.isoformat())
+
+
+def _load_wake_time() -> Optional[datetime]:
+    """Load persisted wake time. Returns None if missing or unparseable."""
+    try:
+        if WAKE_FILE.exists():
+            text = WAKE_FILE.read_text().strip()
+            return datetime.fromisoformat(text)
+    except Exception:
+        pass
+    return None
+
+
+def _clear_wake_time():
+    """Remove persisted wake time."""
+    try:
+        WAKE_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 class VoiceAssistant:
@@ -246,11 +275,33 @@ class HandsFreeAssistant:
         self._wake_timer.daemon = True
         self._wake_timer.start()
 
+        _save_wake_time(target)
         wake_time_str = target.strftime("%H:%M")
         print(f"[Next spontaneous wake at {wake_time_str} (in {delay_seconds/3600:.1f}h)]")
 
+    def _load_saved_wake(self):
+        """Restore a persisted wake time from before reboot."""
+        saved = _load_wake_time()
+        if saved is None:
+            return None
+
+        now = datetime.now()
+        if saved <= now:
+            # Wake time already passed — wake soon
+            print(f"[Saved wake was at {saved.strftime('%H:%M')}, already passed — waking shortly]")
+            _clear_wake_time()
+            return 1/60  # 1 minute
+        else:
+            # Still in the future — use it
+            hours = (saved - now).total_seconds() / 3600
+            print(f"[Restored saved wake at {saved.strftime('%H:%M')} (in {hours:.1f}h)]")
+            _clear_wake_time()
+            return hours
+
     def _fire_spontaneous(self):
         """Called when the spontaneous timer fires."""
+        _clear_wake_time()
+
         # Re-check daily budget
         today = date.today().isoformat()
         if self._spontaneous_date != today:
@@ -350,9 +401,10 @@ class HandsFreeAssistant:
         self.voice.preload_models()
         self.voice.start()
 
-        # Schedule initial spontaneous wake
+        # Restore saved wake or schedule new one
         self._last_interaction_time = datetime.now()
-        self._schedule_next_wake()
+        saved_hours = self._load_saved_wake()
+        self._schedule_next_wake(saved_hours)
 
         while self._running:
             try:
@@ -501,11 +553,31 @@ class TextAssistant:
         self._wake_timer.daemon = True
         self._wake_timer.start()
 
+        _save_wake_time(target)
         wake_time_str = target.strftime("%H:%M")
         print(f"[Next spontaneous wake at {wake_time_str} (in {delay_seconds/3600:.1f}h)]")
 
+    def _load_saved_wake(self):
+        """Restore a persisted wake time from before reboot."""
+        saved = _load_wake_time()
+        if saved is None:
+            return None
+
+        now = datetime.now()
+        if saved <= now:
+            print(f"[Saved wake was at {saved.strftime('%H:%M')}, already passed — waking shortly]")
+            _clear_wake_time()
+            return 1/60
+        else:
+            hours = (saved - now).total_seconds() / 3600
+            print(f"[Restored saved wake at {saved.strftime('%H:%M')} (in {hours:.1f}h)]")
+            _clear_wake_time()
+            return hours
+
     def _fire_spontaneous(self):
         """Called when spontaneous timer fires."""
+        _clear_wake_time()
+
         today = date.today().isoformat()
         if self._spontaneous_date != today:
             self._spontaneous_count = 0
@@ -608,7 +680,8 @@ class TextAssistant:
         print()
 
         self._last_interaction_time = datetime.now()
-        self._schedule_next_wake()
+        saved_hours = self._load_saved_wake()
+        self._schedule_next_wake(saved_hours)
 
         while self._running:
             try:
