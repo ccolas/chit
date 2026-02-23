@@ -241,7 +241,7 @@ class ChitDSL:
             self._execute_command(cmd, draw, state)
 
         # Crop to content
-        img = img.crop((0, 0, self.width, state.y + 30))
+        img = img.crop((0, 0, self.width, state.y + 35))
 
         # Convert to 1-bit for thermal printing
         img = img.convert('1')

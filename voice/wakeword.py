@@ -149,14 +149,14 @@ class WakeWordDetector:
                 self._porcupine = pvporcupine.create(
                     access_key=self._access_key,
                     keyword_paths=[self._custom_model_path],
-                    sensitivities=[0.7]
+                    sensitivities=[0.4]
                 )
             else:
                 # Use built-in keyword
                 self._porcupine = pvporcupine.create(
                     access_key=self._access_key,
                     keywords=[self.keyword],
-                    sensitivities=[0.7]
+                    sensitivities=[0.4]
                 )
 
             print(f"[Wake word ready - say '{self.keyword}' to activate]")

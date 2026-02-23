@@ -199,7 +199,7 @@ def extract_print_block(response: str) -> str:
     """
     Extract all <print> blocks from a response, joined with sleep() between them.
     If no <print> block, returns the whole response (for backwards compatibility).
-    The <reasoning> block is discarded.
+    The <thinking> block is discarded.
     """
     # Find all <print>...</print> blocks and the text between them
     block_pattern = re.compile(r'<print>\s*(.*?)\s*</print>', re.DOTALL)
