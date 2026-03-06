@@ -359,10 +359,13 @@ class ChitDSL:
 
         content = str(args[0])
         size = max(kwargs.get('size', 18), 12)
-        font_name = kwargs.get('font', 'iosevka')
+        font_name = kwargs.get('font', 'courier')
         align = kwargs.get('align', 'left')
+        bold = kwargs.get('bold', False)
+        italic = kwargs.get('italic', False)
+        spacing = kwargs.get('spacing', None)
 
-        font = self.get_font(font_name, size, bold=False, italic=False)
+        font = self.get_font(font_name, size, bold=bold, italic=italic)
 
         # Draw each line exactly as-is
         lines = content.split('\n')
@@ -383,7 +386,8 @@ class ChitDSL:
             min_indent = 0
 
         char_bbox = font.getbbox('M')
-        line_height = int((char_bbox[3] - char_bbox[1]) * 1.1)
+        line_mult = spacing if spacing is not None else 1.1
+        line_height = int((char_bbox[3] - char_bbox[1]) * line_mult)
 
         # For centering, find the widest line to center the block as a whole
         stripped_lines = []

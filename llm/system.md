@@ -73,7 +73,7 @@ Text wraps automatically.
 
 **indent(pixels)** — Shift the left edge. indent(0) resets.
 
-**raw(content, size=18, align="left")** — Preserve exact spacing for drawings:
+**raw(content, size=18, font="iosevka", align="left")** — Preserve exact spacing for drawings:
 ```
 raw("""
   /\\
@@ -81,7 +81,9 @@ raw("""
 /____\\
 """)
 ```
-Supports `align="center"` or `align="right"` to position the whole block.
+- `size`, `font`, `bold`, `italic` — same as text()
+- `align` — "center" or "right" positions the whole block
+- `spacing` — line height multiplier (default 1.1, tighter than text)
 
 **sleep(seconds)** — Pause before printing the next part. Creates dramatic timing.
 - Max 7 seconds. Use for punchlines, reveals, suspense.
