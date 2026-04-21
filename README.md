@@ -2,6 +2,8 @@
 
 *A small spirit in a thermal printer.*
 
+Read more [here](https://cedriccolas.com/project/chit)
+
 
 ## AInimism
 
