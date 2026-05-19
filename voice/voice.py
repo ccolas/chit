@@ -344,16 +344,24 @@ class HandsFreeVoiceInput:
         """Pre-load all models."""
         self.transcriber.preload_model()
 
-        # Load wake word detector
+        # Try Picovoice wake word first; fall back to double-clap if it fails
+        # (e.g. PorcupineActivationRefusedError, missing key, missing library).
         try:
             from .wakeword import WakeWordDetector
             self._wake_detector = WakeWordDetector(self.config)
             self._wake_detector.load_model()
-        except ImportError as e:
-            print(f"[Warning: Wake word detection not available: {e}]")
-            print("[Install with: pip install pvporcupine]")
-        except ValueError as e:
-            print(f"[Wake word error: {e}]")
+            return
+        except Exception as e:
+            print(f"[Wake word unavailable ({type(e).__name__}): {e}]")
+            print("[Falling back to double-clap detection]")
+
+        try:
+            from .clap import ClapDetector
+            self._wake_detector = ClapDetector(self.config)
+            self._wake_detector.load_model()
+        except Exception as e:
+            print(f"[Clap detector failed: {e}]")
+            self._wake_detector = None
 
     def trigger_spontaneous(self):
         """Trigger a spontaneous wake, interrupting listen_for_wake_word."""

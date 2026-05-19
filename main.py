@@ -185,7 +185,7 @@ class HandsFreeAssistant:
     LED_PIN = 22  # Optional LED indicator
     QUIET_START = 23  # 11pm
     QUIET_END = 10    # 10am
-    MAX_SPONTANEOUS_PER_DAY = 3
+    MAX_SPONTANEOUS_PER_DAY = 2
 
     def __init__(self, config: Optional[Config] = None):
         self.config = config or Config()
